@@ -70,7 +70,25 @@
   @keyframes spin{ to{ transform:rotate(360deg); } }
   ::selection{ background:var(--olive); color:var(--paper-soft); }
   .fade-in{ animation:fadein .35s ease; }
-  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }  .mic-btn{
+    width:26px; height:26px;
+    border-radius:50%;
+    background:var(--paper-soft);
+    border:1px solid var(--line);
+    font-size:13px;
+    line-height:1;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .mic-btn.listening{
+    background:var(--clay);
+    border-color:var(--clay);
+    animation:pulse 1s ease infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(168,86,46,.4); }
+    50%{ box-shadow:0 0 0 6px rgba(168,86,46,0); }
+  }
 </style>
 </head>
 <body class="min-h-screen">
@@ -136,12 +154,14 @@
         </select>
       </div>
       <div>
-        <label class="text-xs" style="color:#8A8271">普段の系統（任意）</label>
-        <input type="text" id="regUsualStyle" placeholder="例：シンプル、カジュアル" class="w-full px-3 py-2 mt-1 text-sm">
+        <label class="text-xs" style="color:#8A8271">普段の系統（複数選択可・任意）</label>
+        <div id="usualStyleChips" class="flex flex-wrap gap-2 mt-1"></div>
+        <input type="text" id="regUsualStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
       </div>
       <div>
-        <label class="text-xs" style="color:#8A8271">避けたい要素（任意）</label>
-        <input type="text" id="regNgElements" placeholder="例：露出が多い服、派手な柄" class="w-full px-3 py-2 mt-1 text-sm">
+        <label class="text-xs" style="color:#8A8271">避けたい要素（複数選択可・任意）</label>
+        <div id="ngElementsChips" class="flex flex-wrap gap-2 mt-1"></div>
+        <input type="text" id="regNgElementsOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
       </div>
       <p id="registerError" class="text-xs hidden" style="color:var(--clay)"></p>
       <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">登録してはじめる</button>
@@ -164,22 +184,34 @@
 
       <div class="mb-5">
         <label class="text-sm serif block mb-1">今日のシーン / TPO</label>
-        <input type="text" id="inputScene" placeholder="例：休日のカフェ、きれいめディナー、公園でのんびり" class="w-full px-3 py-2 text-sm">
+        <div class="relative">
+          <input type="text" id="inputScene" placeholder="例：休日のカフェ、きれいめディナー、公園でのんびり" class="w-full px-3 py-2 pr-11 text-sm">
+          <button type="button" class="mic-btn absolute right-2 top-1/2 -translate-y-1/2" data-target="inputScene" title="音声入力">🎤</button>
+        </div>
       </div>
 
       <div class="mb-5">
         <label class="text-sm serif block mb-1">気分・テイスト</label>
-        <input type="text" id="inputMood" placeholder="例：リラックス、上品、アクティブ、清潔感重視" class="w-full px-3 py-2 text-sm">
+        <div class="relative">
+          <input type="text" id="inputMood" placeholder="例：リラックス、上品、アクティブ、清潔感重視" class="w-full px-3 py-2 pr-11 text-sm">
+          <button type="button" class="mic-btn absolute right-2 top-1/2 -translate-y-1/2" data-target="inputMood" title="音声入力">🎤</button>
+        </div>
       </div>
 
       <div class="mb-5">
         <label class="text-sm serif block mb-1">気温・季節感（任意）</label>
-        <input type="text" id="inputTemperature" placeholder="例：25℃くらい、初夏、肌寒い朝晩" class="w-full px-3 py-2 text-sm">
+        <div class="relative">
+          <input type="text" id="inputTemperature" placeholder="例：25℃くらい、初夏、肌寒い朝晩" class="w-full px-3 py-2 pr-11 text-sm">
+          <button type="button" class="mic-btn absolute right-2 top-1/2 -translate-y-1/2" data-target="inputTemperature" title="音声入力">🎤</button>
+        </div>
       </div>
 
       <div class="mb-6">
         <label class="text-sm serif block mb-1">手持ちの使いたいアイテム（任意）</label>
-        <textarea id="inputOwnedItems" rows="2" placeholder="例：白いスニーカーを使いたい" class="w-full px-3 py-2 text-sm"></textarea>
+        <div class="relative">
+          <textarea id="inputOwnedItems" rows="2" placeholder="例：白いスニーカーを使いたい" class="w-full px-3 py-2 pr-11 text-sm"></textarea>
+          <button type="button" class="mic-btn absolute right-2 top-3" data-target="inputOwnedItems" title="音声入力">🎤</button>
+        </div>
       </div>
 
       <button id="generateBtn" class="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2">
@@ -205,12 +237,16 @@
 // ============================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
 
-const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', '指定なし/ミックス'];
+const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M', '指定なし/ミックス'];
+const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
+const NG_ELEMENT_OPTIONS = ['露出が多い服', '派手な柄', 'タイトなシルエット', '原色づかい', 'フリル・レース', 'ロゴが目立つ服', 'その他'];
 
 let state = {
   token: localStorage.getItem('stylistai_token') || null,
   user: JSON.parse(localStorage.getItem('stylistai_user') || 'null'),
-  selectedBrands: new Set()
+  selectedBrands: new Set(),
+  selectedUsualStyle: new Set(),
+  selectedNgElements: new Set()
 };
 
 // ============================================================
@@ -231,7 +267,10 @@ async function callApi(action, payload) {
 // ============================================================
 function init() {
   renderBrandChips();
+  renderChipGroup('usualStyleChips', USUAL_STYLE_OPTIONS, state.selectedUsualStyle, 'regUsualStyleOther');
+  renderChipGroup('ngElementsChips', NG_ELEMENT_OPTIONS, state.selectedNgElements, 'regNgElementsOther');
   bindPasswordToggles();
+  bindVoiceInput();
   bindAuthTabs();
   bindAuthForms();
   bindMainTabs();
@@ -261,6 +300,61 @@ function showMainApp() {
 // ============================================================
 // 認証タブ切り替え
 // ============================================================
+// ============================================================
+// 音声入力（Web Speech API）
+// ============================================================
+function bindVoiceInput() {
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  document.querySelectorAll('.mic-btn').forEach((btn) => {
+    if (!SpeechRecognitionAPI) {
+      btn.title = 'このブラウザは音声入力に対応していません';
+      btn.style.opacity = '0.4';
+      return;
+    }
+
+    let recognition = null;
+    let listening = false;
+
+    btn.addEventListener('click', () => {
+      const field = document.getElementById(btn.dataset.target);
+
+      if (listening) {
+        recognition.stop();
+        return;
+      }
+
+      recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'ja-JP';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        listening = true;
+        btn.classList.add('listening');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        const separator = field.value && !/[\s、。]$/.test(field.value) ? ' ' : '';
+        field.value = field.value + separator + transcript;
+      };
+
+      recognition.onerror = () => {
+        listening = false;
+        btn.classList.remove('listening');
+      };
+
+      recognition.onend = () => {
+        listening = false;
+        btn.classList.remove('listening');
+      };
+
+      recognition.start();
+    });
+  });
+}
+
 function bindPasswordToggles() {
   document.querySelectorAll('.pw-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -309,12 +403,20 @@ function bindAuthForms() {
     e.preventDefault();
     const errEl = document.getElementById('registerError');
     errEl.classList.add('hidden');
+    const usualStyleList = Array.from(state.selectedUsualStyle).filter((v) => v !== 'その他');
+    const otherStyle = document.getElementById('regUsualStyleOther').value.trim();
+    if (state.selectedUsualStyle.has('その他') && otherStyle) usualStyleList.push(otherStyle);
+
+    const ngElementsList = Array.from(state.selectedNgElements).filter((v) => v !== 'その他');
+    const otherNg = document.getElementById('regNgElementsOther').value.trim();
+    if (state.selectedNgElements.has('その他') && otherNg) ngElementsList.push(otherNg);
+
     const payload = {
       email: document.getElementById('regEmail').value.trim(),
       password: document.getElementById('regPassword').value,
       ageGroup: document.getElementById('regAgeGroup').value,
-      usualStyle: document.getElementById('regUsualStyle').value.trim(),
-      ngElements: document.getElementById('regNgElements').value.trim()
+      usualStyle: usualStyleList.join('、'),
+      ngElements: ngElementsList.join('、')
     };
 
     const res = await callApi('register', payload);
@@ -367,25 +469,32 @@ function switchMainTab(tab) {
 // ============================================================
 // ブランド選択チップ
 // ============================================================
-function renderBrandChips() {
-  const container = document.getElementById('brandChips');
+function renderChipGroup(containerId, options, selectedSet, otherInputId) {
+  const container = document.getElementById(containerId);
   container.innerHTML = '';
-  BRAND_OPTIONS.forEach((brand) => {
+  options.forEach((option) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = brand;
+    btn.textContent = option;
     btn.className = 'chip px-3 py-1.5 rounded-full text-xs';
     btn.addEventListener('click', () => {
-      if (state.selectedBrands.has(brand)) {
-        state.selectedBrands.delete(brand);
+      if (selectedSet.has(option)) {
+        selectedSet.delete(option);
         btn.classList.remove('selected');
       } else {
-        state.selectedBrands.add(brand);
+        selectedSet.add(option);
         btn.classList.add('selected');
+      }
+      if (otherInputId && option === 'その他') {
+        document.getElementById(otherInputId).classList.toggle('hidden', !selectedSet.has('その他'));
       }
     });
     container.appendChild(btn);
   });
+}
+
+function renderBrandChips() {
+  renderChipGroup('brandChips', BRAND_OPTIONS, state.selectedBrands, null);
 }
 
 // ============================================================
