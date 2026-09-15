@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FUDAN, ─ パーソナルスタイリストAI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#2B2B26;
+    --paper:#EFE9DC;
+    --paper-soft:#F6F2E8;
+    --olive:#5C6A45;
+    --olive-deep:#3F4A2F;
+    --clay:#A8562E;
+    --line:#D8CFBC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Zen Kaku Gothic New', sans-serif;
+  }
+  .serif{ font-family:'Shippori Mincho', serif; }
+  .card-line{ border:1px solid var(--line); }
+  .btn-primary{
+    background:var(--olive-deep);
+    color:var(--paper-soft);
+    transition:transform .15s ease, background .15s ease;
+  }
+  .btn-primary:hover{ background:var(--olive); transform:translateY(-1px); }
+  .btn-primary:disabled{ opacity:.5; transform:none; cursor:not-allowed; }
+  .chip{
+    border:1px solid var(--line);
+    color:var(--ink);
+    background:var(--paper-soft);
+    transition:all .15s ease;
+  }
+  .chip.selected{
+    background:var(--olive-deep);
+    color:var(--paper-soft);
+    border-color:var(--olive-deep);
+  }
+  .tab-btn{
+    color:#8A8271;
+    border-bottom:2px solid transparent;
+  }
+  .tab-btn.active{
+    color:var(--ink);
+    border-bottom:2px solid var(--clay);
+  }
+  input[type=text], input[type=email], input[type=password], textarea, select{
+    background:var(--paper-soft);
+    border:1px solid var(--line);
+    color:var(--ink);
+  }
+  input:focus, textarea:focus, select:focus{
+    outline:2px solid var(--olive);
+    outline-offset:1px;
+  }
+  .spinner{
+    border:2px solid var(--line);
+    border-top:2px solid var(--olive-deep);
+    border-radius:50%;
+    width:18px; height:18px;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  ::selection{ background:var(--olive); color:var(--paper-soft); }
+  .fade-in{ animation:fadein .35s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="app" class="max-w-3xl mx-auto px-5 pb-24">
+
+  <!-- ===== ヘッダー ===== -->
+  <header class="pt-10 pb-6 flex items-end justify-between border-b" style="border-color:var(--line)">
+    <div>
+      <h1 class="serif text-3xl tracking-wide">FUDAN,<span style="color:var(--clay)">.</span></h1>
+      <p class="text-xs mt-1" style="color:#8A8271">いつもの服が、うまくいく日。</p>
+    </div>
+    <div id="headerUser" class="hidden text-right text-xs" style="color:#8A8271">
+      <p id="headerEmail"></p>
+      <button id="logoutBtn" class="underline mt-1">ログアウト</button>
+    </div>
+  </header>
+
+  <!-- ===== 認証画面 ===== -->
+  <section id="authScreen" class="mt-12 max-w-sm mx-auto">
+    <div class="flex justify-center gap-6 mb-8">
+      <button class="tab-btn active pb-2 text-sm" data-authmode="login" id="tabLogin">ログイン</button>
+      <button class="tab-btn pb-2 text-sm" data-authmode="register" id="tabRegister">新規登録</button>
+    </div>
+
+    <form id="loginForm" class="space-y-3">
+      <div>
+        <label class="text-xs" style="color:#8A8271">メールアドレス</label>
+        <input type="email" id="loginEmail" required class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">パスワード</label>
+        <input type="password" id="loginPassword" required class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <p id="loginError" class="text-xs hidden" style="color:var(--clay)"></p>
+      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">ログイン</button>
+    </form>
+
+    <form id="registerForm" class="space-y-3 hidden">
+      <div>
+        <label class="text-xs" style="color:#8A8271">メールアドレス</label>
+        <input type="email" id="regEmail" required class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">パスワード（6文字以上）</label>
+        <input type="password" id="regPassword" required class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">年代</label>
+        <select id="regAgeGroup" class="w-full px-3 py-2 mt-1 text-sm">
+          <option value="10代">10代</option>
+          <option value="20代" selected>20代</option>
+          <option value="30代">30代</option>
+          <option value="40代">40代</option>
+          <option value="50代">50代</option>
+          <option value="60代以上">60代以上</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">普段の系統（任意）</label>
+        <input type="text" id="regUsualStyle" placeholder="例：シンプル、カジュアル" class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">避けたい要素（任意）</label>
+        <input type="text" id="regNgElements" placeholder="例：露出が多い服、派手な柄" class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <p id="registerError" class="text-xs hidden" style="color:var(--clay)"></p>
+      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">登録してはじめる</button>
+    </form>
+  </section>
+
+  <!-- ===== メインアプリ ===== -->
+  <section id="mainApp" class="hidden mt-8">
+    <div class="flex gap-6 border-b mb-8" style="border-color:var(--line)">
+      <button class="tab-btn active pb-3 text-sm" data-maintab="consult" id="tabConsult">診断する</button>
+      <button class="tab-btn pb-3 text-sm" data-maintab="history" id="tabHistory">履歴</button>
+    </div>
+
+    <!-- --- 診断フォーム --- -->
+    <div id="consultView">
+      <div class="mb-6">
+        <p class="text-sm mb-2 serif">希望ブランド（複数選択可）</p>
+        <div id="brandChips" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <div class="mb-5">
+        <label class="text-sm serif block mb-1">今日のシーン / TPO</label>
+        <input type="text" id="inputScene" placeholder="例：休日のカフェ、きれいめディナー、公園でのんびり" class="w-full px-3 py-2 text-sm">
+      </div>
+
+      <div class="mb-5">
+        <label class="text-sm serif block mb-1">気分・テイスト</label>
+        <input type="text" id="inputMood" placeholder="例：リラックス、上品、アクティブ、清潔感重視" class="w-full px-3 py-2 text-sm">
+      </div>
+
+      <div class="mb-5">
+        <label class="text-sm serif block mb-1">気温・季節感（任意）</label>
+        <input type="text" id="inputTemperature" placeholder="例：25℃くらい、初夏、肌寒い朝晩" class="w-full px-3 py-2 text-sm">
+      </div>
+
+      <div class="mb-6">
+        <label class="text-sm serif block mb-1">手持ちの使いたいアイテム（任意）</label>
+        <textarea id="inputOwnedItems" rows="2" placeholder="例：白いスニーカーを使いたい" class="w-full px-3 py-2 text-sm"></textarea>
+      </div>
+
+      <button id="generateBtn" class="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2">
+        <span id="generateBtnText">コーディネートを提案してもらう</span>
+      </button>
+      <p id="consultError" class="text-xs mt-2 hidden" style="color:var(--clay)"></p>
+
+      <div id="resultArea" class="mt-10"></div>
+    </div>
+
+    <!-- --- 履歴 --- -->
+    <div id="historyView" class="hidden">
+      <div id="historyList" class="space-y-3"></div>
+      <div id="historyDetail" class="mt-8"></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
+
+const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', '指定なし/ミックス'];
+
+let state = {
+  token: localStorage.getItem('stylistai_token') || null,
+  user: JSON.parse(localStorage.getItem('stylistai_user') || 'null'),
+  selectedBrands: new Set()
+};
+
+// ============================================================
+// API通信
+// ============================================================
+async function callApi(action, payload) {
+  const body = Object.assign({ action: action }, payload || {});
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+function init() {
+  renderBrandChips();
+  bindAuthTabs();
+  bindAuthForms();
+  bindMainTabs();
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('generateBtn').addEventListener('click', generateProposal);
+
+  if (state.token && state.user) {
+    showMainApp();
+  } else {
+    showAuthScreen();
+  }
+}
+
+function showAuthScreen() {
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('headerUser').classList.add('hidden');
+}
+
+function showMainApp() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  document.getElementById('headerUser').classList.remove('hidden');
+  document.getElementById('headerEmail').textContent = state.user.email;
+}
+
+// ============================================================
+// 認証タブ切り替え
+// ============================================================
+function bindAuthTabs() {
+  document.getElementById('tabLogin').addEventListener('click', () => switchAuthMode('login'));
+  document.getElementById('tabRegister').addEventListener('click', () => switchAuthMode('register'));
+}
+
+function switchAuthMode(mode) {
+  document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
+  document.getElementById('tabRegister').classList.toggle('active', mode === 'register');
+  document.getElementById('loginForm').classList.toggle('hidden', mode !== 'login');
+  document.getElementById('registerForm').classList.toggle('hidden', mode !== 'register');
+}
+
+// ============================================================
+// 認証フォーム送信
+// ============================================================
+function bindAuthForms() {
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('loginError');
+    errEl.classList.add('hidden');
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    const res = await callApi('login', { email, password });
+    if (res.success) {
+      persistSession(res.token, res.user);
+      showMainApp();
+    } else {
+      errEl.textContent = res.error || 'ログインに失敗しました。';
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('registerError');
+    errEl.classList.add('hidden');
+    const payload = {
+      email: document.getElementById('regEmail').value.trim(),
+      password: document.getElementById('regPassword').value,
+      ageGroup: document.getElementById('regAgeGroup').value,
+      usualStyle: document.getElementById('regUsualStyle').value.trim(),
+      ngElements: document.getElementById('regNgElements').value.trim()
+    };
+
+    const res = await callApi('register', payload);
+    if (res.success) {
+      persistSession(res.token, res.user);
+      showMainApp();
+    } else {
+      errEl.textContent = res.error || '登録に失敗しました。';
+      errEl.classList.remove('hidden');
+    }
+  });
+}
+
+function persistSession(token, user) {
+  state.token = token;
+  state.user = user;
+  localStorage.setItem('stylistai_token', token);
+  localStorage.setItem('stylistai_user', JSON.stringify(user));
+}
+
+async function logout() {
+  if (state.token) {
+    callApi('logout', { token: state.token }).catch(() => {});
+  }
+  state.token = null;
+  state.user = null;
+  localStorage.removeItem('stylistai_token');
+  localStorage.removeItem('stylistai_user');
+  showAuthScreen();
+}
+
+// ============================================================
+// メインタブ切り替え
+// ============================================================
+function bindMainTabs() {
+  document.getElementById('tabConsult').addEventListener('click', () => switchMainTab('consult'));
+  document.getElementById('tabHistory').addEventListener('click', () => {
+    switchMainTab('history');
+    loadHistory();
+  });
+}
+
+function switchMainTab(tab) {
+  document.getElementById('tabConsult').classList.toggle('active', tab === 'consult');
+  document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('consultView').classList.toggle('hidden', tab !== 'consult');
+  document.getElementById('historyView').classList.toggle('hidden', tab !== 'history');
+}
+
+// ============================================================
+// ブランド選択チップ
+// ============================================================
+function renderBrandChips() {
+  const container = document.getElementById('brandChips');
+  container.innerHTML = '';
+  BRAND_OPTIONS.forEach((brand) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = brand;
+    btn.className = 'chip px-3 py-1.5 rounded-full text-xs';
+    btn.addEventListener('click', () => {
+      if (state.selectedBrands.has(brand)) {
+        state.selectedBrands.delete(brand);
+        btn.classList.remove('selected');
+      } else {
+        state.selectedBrands.add(brand);
+        btn.classList.add('selected');
+      }
+    });
+    container.appendChild(btn);
+  });
+}
+
+// ============================================================
+// 提案生成
+// ============================================================
+async function generateProposal() {
+  const errEl = document.getElementById('consultError');
+  errEl.classList.add('hidden');
+
+  const scene = document.getElementById('inputScene').value.trim();
+  const mood = document.getElementById('inputMood').value.trim();
+  const temperature = document.getElementById('inputTemperature').value.trim();
+  const ownedItems = document.getElementById('inputOwnedItems').value.trim();
+
+  if (!scene || !mood) {
+    errEl.textContent = 'シーン/TPOと気分・テイストは必須です。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('generateBtn');
+  const btnText = document.getElementById('generateBtnText');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner inline-block align-middle"></span> スタイリストが考え中…';
+
+  const res = await callApi('generateProposal', {
+    token: state.token,
+    brands: Array.from(state.selectedBrands),
+    scene, mood, temperature, ownedItems
+  });
+
+  btn.disabled = false;
+  btnText.textContent = 'コーディネートを提案してもらう';
+
+  if (res.success) {
+    renderProposal(document.getElementById('resultArea'), res.proposal);
+  } else {
+    errEl.textContent = res.error || '提案の生成に失敗しました。';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function renderProposal(container, proposal) {
+  if (!proposal) { container.innerHTML = ''; return; }
+
+  const items = (proposal.items || []).map((item) => `
+    <div class="card-line rounded-lg p-4 mb-3" style="background:var(--paper-soft)">
+      <p class="text-xs" style="color:var(--clay)">${escapeHtml(item.category || '')} ・ ${escapeHtml(item.brand || '')}</p>
+      <p class="serif text-base mt-1">${escapeHtml(item.name || '')}</p>
+      <p class="text-sm mt-2" style="color:#5A543F">${escapeHtml(item.description || '')}</p>
+      ${item.styling_tip ? `<p class="text-xs mt-2" style="color:var(--olive-deep)">Point: ${escapeHtml(item.styling_tip)}</p>` : ''}
+    </div>
+  `).join('');
+
+  const points = (proposal.styling_points || []).map((p) => `<li class="text-sm mb-1">・${escapeHtml(p)}</li>`).join('');
+
+  container.innerHTML = `
+    <div class="fade-in">
+      <h2 class="serif text-xl mb-1">今日のコーディネート提案</h2>
+      ${proposal.coordination_summary ? `<p class="text-sm mb-5" style="color:#5A543F">${escapeHtml(proposal.coordination_summary)}</p>` : ''}
+      ${items}
+      ${points ? `<div class="mt-5"><p class="serif text-sm mb-2">高見えテクニック</p><ul>${points}</ul></div>` : ''}
+      ${proposal.stylist_comment ? `<div class="mt-5 p-4 rounded-lg" style="background:var(--olive-deep); color:var(--paper-soft)"><p class="text-xs mb-1">スタイリストより</p><p class="text-sm">${escapeHtml(proposal.stylist_comment)}</p></div>` : ''}
+    </div>
+  `;
+}
+
+// ============================================================
+// 履歴
+// ============================================================
+async function loadHistory() {
+  const listEl = document.getElementById('historyList');
+  const detailEl = document.getElementById('historyDetail');
+  detailEl.innerHTML = '';
+  listEl.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+
+  const res = await callApi('getHistory', { token: state.token });
+  if (!res.success) {
+    listEl.innerHTML = `<p class="text-sm" style="color:var(--clay)">${escapeHtml(res.error || '履歴の取得に失敗しました。')}</p>`;
+    return;
+  }
+
+  if (!res.history.length) {
+    listEl.innerHTML = '<p class="text-sm" style="color:#8A8271">まだ提案履歴がありません。</p>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  res.history.forEach((h) => {
+    const row = document.createElement('button');
+    row.className = 'card-line rounded-lg p-3 w-full text-left';
+    row.style.background = 'var(--paper-soft)';
+    const date = new Date(h.createdAt);
+    row.innerHTML = `
+      <p class="text-xs" style="color:#8A8271">${date.toLocaleString('ja-JP')} ・ ${escapeHtml(h.scene)}</p>
+      <p class="text-sm mt-1">${escapeHtml(h.summary || h.mood)}</p>
+    `;
+    row.addEventListener('click', () => loadHistoryDetail(h.historyId));
+    listEl.appendChild(row);
+  });
+}
+
+async function loadHistoryDetail(historyId) {
+  const detailEl = document.getElementById('historyDetail');
+  detailEl.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+
+  const res = await callApi('getHistoryDetail', { token: state.token, historyId });
+  if (!res.success) {
+    detailEl.innerHTML = `<p class="text-sm" style="color:var(--clay)">${escapeHtml(res.error || '取得に失敗しました。')}</p>`;
+    return;
+  }
+
+  detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)">';
+  renderProposal(detailEl, res.detail.proposal);
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+init();
+</script>
+</body>
+</html>
