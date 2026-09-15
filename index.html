@@ -103,7 +103,10 @@
       </div>
       <div>
         <label class="text-xs" style="color:#8A8271">パスワード</label>
-        <input type="password" id="loginPassword" required class="w-full px-3 py-2 mt-1 text-sm">
+        <div class="relative mt-1">
+          <input type="password" id="loginPassword" required class="w-full px-3 py-2 pr-16 text-sm">
+          <button type="button" data-toggle-target="loginPassword" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+        </div>
       </div>
       <p id="loginError" class="text-xs hidden" style="color:var(--clay)"></p>
       <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">ログイン</button>
@@ -116,7 +119,10 @@
       </div>
       <div>
         <label class="text-xs" style="color:#8A8271">パスワード（6文字以上）</label>
-        <input type="password" id="regPassword" required class="w-full px-3 py-2 mt-1 text-sm">
+        <div class="relative mt-1">
+          <input type="password" id="regPassword" required class="w-full px-3 py-2 pr-16 text-sm">
+          <button type="button" data-toggle-target="regPassword" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+        </div>
       </div>
       <div>
         <label class="text-xs" style="color:#8A8271">年代</label>
@@ -225,6 +231,7 @@ async function callApi(action, payload) {
 // ============================================================
 function init() {
   renderBrandChips();
+  bindPasswordToggles();
   bindAuthTabs();
   bindAuthForms();
   bindMainTabs();
@@ -254,6 +261,17 @@ function showMainApp() {
 // ============================================================
 // 認証タブ切り替え
 // ============================================================
+function bindPasswordToggles() {
+  document.querySelectorAll('.pw-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.toggleTarget);
+      const isHidden = input.type === 'password';
+      input.type = isHidden ? 'text' : 'password';
+      btn.textContent = isHidden ? '非表示' : '表示';
+    });
+  });
+}
+
 function bindAuthTabs() {
   document.getElementById('tabLogin').addEventListener('click', () => switchAuthMode('login'));
   document.getElementById('tabRegister').addEventListener('click', () => switchAuthMode('register'));
