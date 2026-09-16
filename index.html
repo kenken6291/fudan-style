@@ -128,19 +128,26 @@
       </div>
       <p id="loginError" class="text-xs hidden" style="color:var(--clay)"></p>
       <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">ログイン</button>
+      <button type="button" id="showForgotBtn" class="text-xs underline w-full text-center mt-1" style="color:#8A8271">パスワードをお忘れの方</button>
+    </form>
+
+    <form id="forgotForm" class="space-y-3 hidden">
+      <p class="text-xs" style="color:#5A543F">登録済みのメールアドレスに仮パスワードを送信します。</p>
+      <div>
+        <label class="text-xs" style="color:#8A8271">メールアドレス</label>
+        <input type="email" id="forgotEmail" required class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <p id="forgotError" class="text-xs hidden" style="color:var(--clay)"></p>
+      <p id="forgotSuccess" class="text-xs hidden" style="color:var(--olive-deep)"></p>
+      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">仮パスワードを送信</button>
+      <button type="button" id="backToLoginBtn" class="text-xs underline w-full text-center mt-1" style="color:#8A8271">ログインに戻る</button>
     </form>
 
     <form id="registerForm" class="space-y-3 hidden">
+      <p class="text-xs mb-1" style="color:#5A543F">メールアドレスを登録すると、仮パスワードをメールでお送りします。</p>
       <div>
         <label class="text-xs" style="color:#8A8271">メールアドレス</label>
         <input type="email" id="regEmail" required class="w-full px-3 py-2 mt-1 text-sm">
-      </div>
-      <div>
-        <label class="text-xs" style="color:#8A8271">パスワード（6文字以上）</label>
-        <div class="relative mt-1">
-          <input type="password" id="regPassword" required class="w-full px-3 py-2 pr-16 text-sm">
-          <button type="button" data-toggle-target="regPassword" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
-        </div>
       </div>
       <div>
         <label class="text-xs" style="color:#8A8271">年代</label>
@@ -177,7 +184,32 @@
         <input type="text" id="regNgElementsOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
       </div>
       <p id="registerError" class="text-xs hidden" style="color:var(--clay)"></p>
-      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">登録してはじめる</button>
+      <p id="registerSuccess" class="text-xs hidden" style="color:var(--olive-deep)"></p>
+      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">仮パスワードを受け取って登録</button>
+    </form>
+  </section>
+
+  <!-- ===== 強制パスワード設定画面 ===== -->
+  <section id="forcePasswordScreen" class="hidden mt-12 max-w-sm mx-auto">
+    <h2 class="serif text-lg mb-2">新しいパスワードを設定</h2>
+    <p class="text-xs mb-5" style="color:#5A543F">仮パスワードでのログインが確認できました。今後使う新しいパスワードを設定してください。</p>
+    <form id="forcePasswordForm" class="space-y-3">
+      <div>
+        <label class="text-xs" style="color:#8A8271">新しいパスワード（6文字以上）</label>
+        <div class="relative mt-1">
+          <input type="password" id="newPassword1" required class="w-full px-3 py-2 pr-16 text-sm">
+          <button type="button" data-toggle-target="newPassword1" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">新しいパスワード（確認）</label>
+        <div class="relative mt-1">
+          <input type="password" id="newPassword2" required class="w-full px-3 py-2 pr-16 text-sm">
+          <button type="button" data-toggle-target="newPassword2" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+        </div>
+      </div>
+      <p id="forcePasswordError" class="text-xs hidden" style="color:var(--clay)"></p>
+      <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">パスワードを設定する</button>
     </form>
   </section>
 
@@ -297,7 +329,7 @@
 // ============================================================
 // 設定
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/【ここにデプロイIDを貼る】/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
 
 const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M', '指定なし/ミックス'];
 const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
@@ -354,12 +386,21 @@ function init() {
 
 function showAuthScreen() {
   document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('forcePasswordScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('headerUser').classList.add('hidden');
+}
+
+function showForcePasswordScreen() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('forcePasswordScreen').classList.remove('hidden');
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('headerUser').classList.add('hidden');
 }
 
 function showMainApp() {
   document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('forcePasswordScreen').classList.add('hidden');
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('headerUser').classList.remove('hidden');
   document.getElementById('headerEmail').textContent = state.user.email;
@@ -437,6 +478,8 @@ function bindPasswordToggles() {
 function bindAuthTabs() {
   document.getElementById('tabLogin').addEventListener('click', () => switchAuthMode('login'));
   document.getElementById('tabRegister').addEventListener('click', () => switchAuthMode('register'));
+  document.getElementById('showForgotBtn').addEventListener('click', () => switchAuthMode('forgot'));
+  document.getElementById('backToLoginBtn').addEventListener('click', () => switchAuthMode('login'));
 }
 
 function switchAuthMode(mode) {
@@ -444,6 +487,7 @@ function switchAuthMode(mode) {
   document.getElementById('tabRegister').classList.toggle('active', mode === 'register');
   document.getElementById('loginForm').classList.toggle('hidden', mode !== 'login');
   document.getElementById('registerForm').classList.toggle('hidden', mode !== 'register');
+  document.getElementById('forgotForm').classList.toggle('hidden', mode !== 'forgot');
 }
 
 // ============================================================
@@ -460,7 +504,11 @@ function bindAuthForms() {
     const res = await callApi('login', { email, password });
     if (res.success) {
       persistSession(res.token, res.user);
-      showMainApp();
+      if (res.passwordResetRequired) {
+        showForcePasswordScreen();
+      } else {
+        showMainApp();
+      }
     } else {
       errEl.textContent = res.error || 'ログインに失敗しました。';
       errEl.classList.remove('hidden');
@@ -470,7 +518,10 @@ function bindAuthForms() {
   document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('registerError');
+    const successEl = document.getElementById('registerSuccess');
     errEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
     const usualStyleList = Array.from(state.selectedUsualStyle).filter((v) => v !== 'その他');
     const otherStyle = document.getElementById('regUsualStyleOther').value.trim();
     if (state.selectedUsualStyle.has('その他') && otherStyle) usualStyleList.push(otherStyle);
@@ -481,7 +532,6 @@ function bindAuthForms() {
 
     const payload = {
       email: document.getElementById('regEmail').value.trim(),
-      password: document.getElementById('regPassword').value,
       ageGroup: document.getElementById('regAgeGroup').value,
       gender: document.getElementById('regGender').value,
       hairStyle: document.getElementById('regHairStyle').value.trim(),
@@ -491,10 +541,61 @@ function bindAuthForms() {
 
     const res = await callApi('register', payload);
     if (res.success) {
-      persistSession(res.token, res.user);
-      showMainApp();
+      successEl.textContent = res.message || '仮パスワードをメールに送信しました。';
+      successEl.classList.remove('hidden');
+      document.getElementById('registerForm').reset();
+      document.getElementById('loginEmail').value = payload.email;
+      setTimeout(() => switchAuthMode('login'), 1800);
     } else {
       errEl.textContent = res.error || '登録に失敗しました。';
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('forgotError');
+    const successEl = document.getElementById('forgotSuccess');
+    errEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
+    const email = document.getElementById('forgotEmail').value.trim();
+    const res = await callApi('forgotPassword', { email });
+    if (res.success) {
+      successEl.textContent = res.message || '仮パスワードをメールに送信しました。';
+      successEl.classList.remove('hidden');
+      document.getElementById('loginEmail').value = email;
+    } else {
+      errEl.textContent = res.error || '送信に失敗しました。';
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  document.getElementById('forcePasswordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('forcePasswordError');
+    errEl.classList.add('hidden');
+
+    const p1 = document.getElementById('newPassword1').value;
+    const p2 = document.getElementById('newPassword2').value;
+
+    if (p1.length < 6) {
+      errEl.textContent = 'パスワードは6文字以上で設定してください。';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (p1 !== p2) {
+      errEl.textContent = '確認用パスワードが一致しません。';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    const res = await callApi('setNewPassword', { token: state.token, newPassword: p1 });
+    if (res.success) {
+      document.getElementById('forcePasswordForm').reset();
+      showMainApp();
+    } else {
+      errEl.textContent = res.error || 'パスワードの設定に失敗しました。';
       errEl.classList.remove('hidden');
     }
   });
