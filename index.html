@@ -320,6 +320,36 @@
       <button id="saveProfileBtn" class="btn-primary w-full py-2.5 text-sm">プロフィールを保存</button>
       <p id="profileSavedMsg" class="text-xs mt-2 hidden" style="color:var(--olive-deep)">保存しました。</p>
       <p id="profileError" class="text-xs mt-2 hidden" style="color:var(--clay)"></p>
+
+      <hr class="my-8" style="border-color:var(--line)">
+
+      <h3 class="serif text-base mb-4">パスワードを変更</h3>
+      <form id="changePasswordForm" class="space-y-3">
+        <div>
+          <label class="text-xs" style="color:#8A8271">現在のパスワード</label>
+          <div class="relative mt-1">
+            <input type="password" id="currentPassword" required class="w-full px-3 py-2 pr-16 text-sm">
+            <button type="button" data-toggle-target="currentPassword" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs" style="color:#8A8271">新しいパスワード（6文字以上）</label>
+          <div class="relative mt-1">
+            <input type="password" id="changeNewPassword1" required class="w-full px-3 py-2 pr-16 text-sm">
+            <button type="button" data-toggle-target="changeNewPassword1" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs" style="color:#8A8271">新しいパスワード（確認）</label>
+          <div class="relative mt-1">
+            <input type="password" id="changeNewPassword2" required class="w-full px-3 py-2 pr-16 text-sm">
+            <button type="button" data-toggle-target="changeNewPassword2" class="pw-toggle absolute right-2 top-1/2 -translate-y-1/2 text-xs underline" style="color:#8A8271">表示</button>
+          </div>
+        </div>
+        <p id="changePasswordSavedMsg" class="text-xs hidden" style="color:var(--olive-deep)">パスワードを変更しました。</p>
+        <p id="changePasswordError" class="text-xs hidden" style="color:var(--clay)"></p>
+        <button type="submit" class="btn-primary w-full py-2.5 text-sm">パスワードを変更する</button>
+      </form>
     </div>
   </section>
 
@@ -930,6 +960,38 @@ async function saveProfile() {
     errEl.classList.remove('hidden');
   }
 }
+
+document.getElementById('changePasswordForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('changePasswordError');
+  const savedEl = document.getElementById('changePasswordSavedMsg');
+  errEl.classList.add('hidden');
+  savedEl.classList.add('hidden');
+
+  const currentPassword = document.getElementById('currentPassword').value;
+  const p1 = document.getElementById('changeNewPassword1').value;
+  const p2 = document.getElementById('changeNewPassword2').value;
+
+  if (p1.length < 6) {
+    errEl.textContent = '新しいパスワードは6文字以上で設定してください。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (p1 !== p2) {
+    errEl.textContent = '確認用パスワードが一致しません。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const res = await callApi('changePassword', { token: state.token, currentPassword, newPassword: p1 });
+  if (res.success) {
+    document.getElementById('changePasswordForm').reset();
+    savedEl.classList.remove('hidden');
+  } else {
+    errEl.textContent = res.error || 'パスワードの変更に失敗しました。';
+    errEl.classList.remove('hidden');
+  }
+});
 
 // ============================================================
 // 試着イメージ生成
