@@ -271,6 +271,11 @@
 
     <!-- --- 履歴 --- -->
     <div id="historyView" class="hidden">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs" style="color:#8A8271">試着イメージがある提案にはチェックを入れて比較できます</p>
+        <button id="toggleCompareBtn" type="button" class="text-xs underline" style="color:var(--olive-deep)">比較する</button>
+      </div>
+      <div id="compareArea" class="hidden mb-8"></div>
       <div id="historyList" class="space-y-3"></div>
       <div id="historyDetail" class="mt-8"></div>
     </div>
@@ -1034,6 +1039,9 @@ function attachTryOnSection(parentEl, historyId, existingUrl) {
 // ============================================================
 // 履歴
 // ============================================================
+let compareMode = false;
+let compareSelection = new Map(); // historyId -> { imageUrl, label }
+
 async function loadHistory() {
   const listEl = document.getElementById('historyList');
   const detailEl = document.getElementById('historyDetail');
@@ -1053,18 +1061,82 @@ async function loadHistory() {
 
   listEl.innerHTML = '';
   res.history.forEach((h) => {
-    const row = document.createElement('button');
-    row.className = 'card-line rounded-lg p-3 w-full text-left';
-    row.style.background = 'var(--paper-soft)';
     const date = new Date(h.createdAt);
+    const label = date.toLocaleString('ja-JP') + ' ・ ' + h.scene;
+    const hasImage = !!h.tryOnImageUrl;
+
+    const row = document.createElement('div');
+    row.className = 'card-line rounded-lg p-3 flex items-center gap-3';
+    row.style.background = 'var(--paper-soft)';
+
+    const checkboxHtml = compareMode
+      ? `<input type="checkbox" class="compare-checkbox flex-shrink-0" ${hasImage ? '' : 'disabled'} ${compareSelection.has(h.historyId) ? 'checked' : ''}>`
+      : '';
+    const thumbHtml = hasImage
+      ? `<img src="${h.tryOnImageUrl}" class="w-12 h-16 object-cover rounded flex-shrink-0" style="background:var(--paper)">`
+      : `<div class="w-12 h-16 rounded flex-shrink-0 flex items-center justify-center text-[10px]" style="background:var(--paper); color:#B8AF9C">画像なし</div>`;
+
     row.innerHTML = `
-      <p class="text-xs" style="color:#8A8271">${date.toLocaleString('ja-JP')} ・ ${escapeHtml(h.scene)}</p>
-      <p class="text-sm mt-1">${escapeHtml(h.summary || h.mood)}</p>
+      ${checkboxHtml}
+      ${thumbHtml}
+      <button type="button" class="flex-1 text-left">
+        <p class="text-xs" style="color:#8A8271">${escapeHtml(label)}</p>
+        <p class="text-sm mt-1">${escapeHtml(h.summary || h.mood)}</p>
+      </button>
     `;
-    row.addEventListener('click', () => loadHistoryDetail(h.historyId));
+
+    const openBtn = row.querySelector('button');
+    openBtn.addEventListener('click', () => loadHistoryDetail(h.historyId));
+
+    if (compareMode) {
+      const checkbox = row.querySelector('.compare-checkbox');
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          compareSelection.set(h.historyId, { imageUrl: h.tryOnImageUrl, label: label });
+        } else {
+          compareSelection.delete(h.historyId);
+        }
+        renderCompareArea();
+      });
+    }
+
     listEl.appendChild(row);
   });
+
+  renderCompareArea();
 }
+
+function renderCompareArea() {
+  const area = document.getElementById('compareArea');
+  if (!compareMode || compareSelection.size === 0) {
+    area.classList.add('hidden');
+    area.innerHTML = '';
+    return;
+  }
+
+  area.classList.remove('hidden');
+  const cards = Array.from(compareSelection.entries()).map(([historyId, item]) => `
+    <div class="card-line rounded-lg overflow-hidden flex-shrink-0" style="width:160px; background:var(--paper-soft)">
+      <img src="${item.imageUrl}" class="w-full aspect-[3/4] object-cover">
+      <p class="text-[10px] p-2" style="color:#8A8271">${escapeHtml(item.label)}</p>
+    </div>
+  `).join('');
+
+  area.innerHTML = `
+    <p class="text-xs mb-2 serif">選択した試着イメージの比較（${compareSelection.size}件）</p>
+    <div class="flex gap-3 overflow-x-auto pb-2">${cards}</div>
+  `;
+}
+
+document.getElementById('toggleCompareBtn')?.addEventListener('click', () => {
+  compareMode = !compareMode;
+  const btn = document.getElementById('toggleCompareBtn');
+  btn.textContent = compareMode ? '比較をやめる' : '比較する';
+  if (!compareMode) {
+    compareSelection.clear();
+  }
+  loadHistory();
+});
 
 async function loadHistoryDetail(historyId) {
   const detailEl = document.getElementById('historyDetail');
