@@ -154,6 +154,19 @@
         </select>
       </div>
       <div>
+        <label class="text-xs" style="color:#8A8271">性別（任意）</label>
+        <select id="regGender" class="w-full px-3 py-2 mt-1 text-sm">
+          <option value="">回答しない</option>
+          <option value="男性">男性</option>
+          <option value="女性">女性</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs" style="color:#8A8271">髪型（任意）</label>
+        <input type="text" id="regHairStyle" placeholder="例：ショートヘア、パーマ、坊主" class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div>
         <label class="text-xs" style="color:#8A8271">普段の系統（複数選択可・任意）</label>
         <div id="usualStyleChips" class="flex flex-wrap gap-2 mt-1"></div>
         <input type="text" id="regUsualStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
@@ -173,6 +186,7 @@
     <div class="flex gap-6 border-b mb-8" style="border-color:var(--line)">
       <button class="tab-btn active pb-3 text-sm" data-maintab="consult" id="tabConsult">診断する</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="history" id="tabHistory">履歴</button>
+      <button class="tab-btn pb-3 text-sm" data-maintab="photos" id="tabPhotos">マイフォト</button>
     </div>
 
     <!-- --- 診断フォーム --- -->
@@ -227,6 +241,12 @@
       <div id="historyList" class="space-y-3"></div>
       <div id="historyDetail" class="mt-8"></div>
     </div>
+
+    <!-- --- マイフォト --- -->
+    <div id="photosView" class="hidden">
+      <p class="text-sm mb-5" style="color:#5A543F">前後左右の写真を登録すると、提案されたコーディネートを実際に着たイメージを作成できます。正面写真は必須です。</p>
+      <div class="grid grid-cols-2 gap-4" id="photoSlots"></div>
+    </div>
   </section>
 
 </div>
@@ -240,6 +260,12 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc
 const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M', '指定なし/ミックス'];
 const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
 const NG_ELEMENT_OPTIONS = ['露出が多い服', '派手な柄', 'タイトなシルエット', '原色づかい', 'フリル・レース', 'ロゴが目立つ服', 'その他'];
+const PHOTO_ANGLES = [
+  { key: 'front', label: '正面（必須）' },
+  { key: 'back', label: '後ろ' },
+  { key: 'left', label: '左横' },
+  { key: 'right', label: '右横' }
+];
 
 let state = {
   token: localStorage.getItem('stylistai_token') || null,
@@ -415,6 +441,8 @@ function bindAuthForms() {
       email: document.getElementById('regEmail').value.trim(),
       password: document.getElementById('regPassword').value,
       ageGroup: document.getElementById('regAgeGroup').value,
+      gender: document.getElementById('regGender').value,
+      hairStyle: document.getElementById('regHairStyle').value.trim(),
       usualStyle: usualStyleList.join('、'),
       ngElements: ngElementsList.join('、')
     };
@@ -457,13 +485,19 @@ function bindMainTabs() {
     switchMainTab('history');
     loadHistory();
   });
+  document.getElementById('tabPhotos').addEventListener('click', () => {
+    switchMainTab('photos');
+    renderPhotoSlots();
+  });
 }
 
 function switchMainTab(tab) {
   document.getElementById('tabConsult').classList.toggle('active', tab === 'consult');
   document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('tabPhotos').classList.toggle('active', tab === 'photos');
   document.getElementById('consultView').classList.toggle('hidden', tab !== 'consult');
   document.getElementById('historyView').classList.toggle('hidden', tab !== 'history');
+  document.getElementById('photosView').classList.toggle('hidden', tab !== 'photos');
 }
 
 // ============================================================
@@ -530,7 +564,9 @@ async function generateProposal() {
   btnText.textContent = 'コーディネートを提案してもらう';
 
   if (res.success) {
-    renderProposal(document.getElementById('resultArea'), res.proposal);
+    const resultArea = document.getElementById('resultArea');
+    renderProposal(resultArea, res.proposal);
+    attachTryOnSection(resultArea, res.historyId, '');
   } else {
     errEl.textContent = res.error || '提案の生成に失敗しました。';
     errEl.classList.remove('hidden');
@@ -563,9 +599,124 @@ function renderProposal(container, proposal) {
 }
 
 // ============================================================
-// 履歴
+// マイフォト
 // ============================================================
-async function loadHistory() {
+function renderPhotoSlots() {
+  const container = document.getElementById('photoSlots');
+  container.innerHTML = '';
+
+  PHOTO_ANGLES.forEach((angle) => {
+    const currentUrl = state.user && state.user['photo' + capitalize(angle.key)];
+    const wrapper = document.createElement('div');
+    wrapper.className = 'card-line rounded-lg p-3 text-center';
+    wrapper.style.background = 'var(--paper-soft)';
+    wrapper.innerHTML = `
+      <p class="text-xs mb-2" style="color:#8A8271">${angle.label}</p>
+      <div class="aspect-[3/4] rounded overflow-hidden mb-2 flex items-center justify-center" style="background:var(--paper)">
+        ${currentUrl ? `<img src="${currentUrl}" class="w-full h-full object-cover" alt="${angle.label}">` : `<span class="text-xs" style="color:#B8AF9C">未登録</span>`}
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="photoInput_${angle.key}" class="hidden">
+      <button type="button" class="btn-primary w-full py-1.5 text-xs" data-angle="${angle.key}" id="photoBtn_${angle.key}">写真を選ぶ</button>
+    `;
+    container.appendChild(wrapper);
+
+    const input = wrapper.querySelector('#photoInput_' + angle.key);
+    const btn = wrapper.querySelector('#photoBtn_' + angle.key);
+    btn.addEventListener('click', () => input.click());
+    input.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        uploadPhoto(angle.key, e.target.files[0], btn);
+      }
+    });
+  });
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function resizeImageToBase64(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(dataUrl.split(',')[1]);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPhoto(angle, file, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'アップロード中…';
+
+  try {
+    const base64 = await resizeImageToBase64(file, 1024);
+    const res = await callApi('uploadPhoto', { token: state.token, angle: angle, imageBase64: base64, mimeType: 'image/jpeg' });
+    if (res.success) {
+      state.user['photo' + capitalize(angle)] = res.url;
+      localStorage.setItem('stylistai_user', JSON.stringify(state.user));
+      renderPhotoSlots();
+    } else {
+      alert(res.error || '写真のアップロードに失敗しました。');
+    }
+  } catch (err) {
+    alert('写真の処理中にエラーが発生しました。');
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
+// ============================================================
+// 試着イメージ生成
+// ============================================================
+async function generateTryOnImage(historyId, containerEl) {
+  containerEl.innerHTML = '<p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>試着イメージを作成中…（1分ほどかかります）</p>';
+
+  const res = await callApi('generateTryOnImage', { token: state.token, historyId: historyId });
+  if (res.success) {
+    renderTryOnImage(containerEl, res.tryOnImageUrl);
+  } else {
+    containerEl.innerHTML = `<p class="text-xs" style="color:var(--clay)">${escapeHtml(res.error || '試着イメージの生成に失敗しました。')}</p>`;
+  }
+}
+
+function renderTryOnImage(containerEl, url) {
+  containerEl.innerHTML = `
+    <p class="text-xs mb-2" style="color:#8A8271">試着イメージ（Googleドライブに保存済み）</p>
+    <img src="${url}" class="w-full rounded-lg card-line">
+    <a href="${url}" target="_blank" class="text-xs underline mt-2 inline-block" style="color:var(--olive-deep)">画像を新しいタブで開く</a>
+  `;
+}
+
+function attachTryOnSection(parentEl, historyId, existingUrl) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'mt-5';
+  parentEl.appendChild(wrapper);
+
+  if (existingUrl) {
+    renderTryOnImage(wrapper, existingUrl);
+  } else {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-primary px-4 py-2 text-xs';
+    btn.textContent = 'この着こなしの試着イメージを作成';
+    btn.addEventListener('click', () => generateTryOnImage(historyId, wrapper));
+    wrapper.appendChild(btn);
+  }
+}
   const listEl = document.getElementById('historyList');
   const detailEl = document.getElementById('historyDetail');
   detailEl.innerHTML = '';
@@ -609,6 +760,7 @@ async function loadHistoryDetail(historyId) {
 
   detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)">';
   renderProposal(detailEl, res.detail.proposal);
+  attachTryOnSection(detailEl, res.detail.historyId, res.detail.tryOnImageUrl || '');
 }
 
 // ============================================================
