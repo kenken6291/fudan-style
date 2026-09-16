@@ -227,6 +227,7 @@
       <div class="mb-6">
         <p class="text-sm mb-2 serif">希望ブランド（複数選択可）</p>
         <div id="brandChips" class="flex flex-wrap gap-2"></div>
+        <input type="text" id="brandOther" placeholder="その他（ブランド名を自由入力、複数可）" class="w-full px-3 py-2 mt-2 text-sm hidden">
       </div>
 
       <div class="mb-5">
@@ -366,7 +367,11 @@
 // ============================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
 
-const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M', '指定なし/ミックス'];
+const BRAND_OPTIONS = [
+  'ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M',
+  'GLOBAL WORK', 'Mac-House', 'coen', 'L.L.Bean', 'Belluna', 'Right-on', 'COMME CA ISM', 'DoCLASSE',
+  '指定なし/ミックス', 'その他'
+];
 const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
 const NG_ELEMENT_OPTIONS = ['露出が多い服', '派手な柄', 'タイトなシルエット', '原色づかい', 'フリル・レース', 'ロゴが目立つ服', 'その他'];
 const PHOTO_ANGLES = [
@@ -712,7 +717,7 @@ function renderChipGroup(containerId, options, selectedSet, otherInputId) {
 }
 
 function renderBrandChips() {
-  renderChipGroup('brandChips', BRAND_OPTIONS, state.selectedBrands, null);
+  renderChipGroup('brandChips', BRAND_OPTIONS, state.selectedBrands, 'brandOther');
 }
 
 // ============================================================
@@ -738,9 +743,15 @@ async function generateProposal() {
   btn.disabled = true;
   btnText.innerHTML = '<span class="spinner inline-block align-middle"></span> スタイリストが考え中…';
 
+  const brandList = Array.from(state.selectedBrands).filter((v) => v !== 'その他');
+  const otherBrand = document.getElementById('brandOther').value.trim();
+  if (state.selectedBrands.has('その他') && otherBrand) {
+    otherBrand.split(/[、,]/).map((s) => s.trim()).filter(Boolean).forEach((b) => brandList.push(b));
+  }
+
   const res = await callApi('generateProposal', {
     token: state.token,
-    brands: Array.from(state.selectedBrands),
+    brands: brandList,
     scene, mood, temperature, ownedItems
   });
 
