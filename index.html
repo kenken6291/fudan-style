@@ -297,7 +297,7 @@
 // ============================================================
 // 設定
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
+const API_URL = 'https://script.google.com/macros/s/【ここにデプロイIDを貼る】/exec';
 
 const BRAND_OPTIONS = ['ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M', '指定なし/ミックス'];
 const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
@@ -868,6 +868,10 @@ function attachTryOnSection(parentEl, historyId, existingUrl) {
     wrapper.appendChild(btn);
   }
 }
+// ============================================================
+// 履歴
+// ============================================================
+async function loadHistory() {
   const listEl = document.getElementById('historyList');
   const detailEl = document.getElementById('historyDetail');
   detailEl.innerHTML = '';
