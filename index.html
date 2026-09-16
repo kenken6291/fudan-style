@@ -794,7 +794,7 @@ function renderPhotoSlots() {
       <div class="aspect-[3/4] rounded overflow-hidden mb-2 flex items-center justify-center" style="background:var(--paper)">
         ${currentUrl ? `<img src="${currentUrl}" class="w-full h-full object-cover" alt="${angle.label}">` : `<span class="text-xs" style="color:#B8AF9C">未登録</span>`}
       </div>
-      <input type="file" accept="image/*" capture="environment" id="photoInput_${angle.key}" class="hidden">
+      <input type="file" accept="image/*" id="photoInput_${angle.key}" class="hidden">
       <button type="button" class="btn-primary w-full py-1.5 text-xs" data-angle="${angle.key}" id="photoBtn_${angle.key}">写真を選ぶ</button>
     `;
     container.appendChild(wrapper);
