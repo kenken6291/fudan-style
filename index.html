@@ -187,6 +187,7 @@
       <button class="tab-btn active pb-3 text-sm" data-maintab="consult" id="tabConsult">診断する</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="history" id="tabHistory">履歴</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="photos" id="tabPhotos">マイフォト</button>
+      <button class="tab-btn pb-3 text-sm" data-maintab="profile" id="tabProfile">プロフィール</button>
     </div>
 
     <!-- --- 診断フォーム --- -->
@@ -246,6 +247,47 @@
     <div id="photosView" class="hidden">
       <p class="text-sm mb-5" style="color:#5A543F">前後左右の写真を登録すると、提案されたコーディネートを実際に着たイメージを作成できます。正面写真は必須です。</p>
       <div class="grid grid-cols-2 gap-4" id="photoSlots"></div>
+    </div>
+
+    <!-- --- プロフィール編集 --- -->
+    <div id="profileView" class="hidden max-w-sm">
+      <div class="mb-5">
+        <label class="text-xs" style="color:#8A8271">年代</label>
+        <select id="editAgeGroup" class="w-full px-3 py-2 mt-1 text-sm">
+          <option value="10代">10代</option>
+          <option value="20代">20代</option>
+          <option value="30代">30代</option>
+          <option value="40代">40代</option>
+          <option value="50代">50代</option>
+          <option value="60代以上">60代以上</option>
+        </select>
+      </div>
+      <div class="mb-5">
+        <label class="text-xs" style="color:#8A8271">性別（任意）</label>
+        <select id="editGender" class="w-full px-3 py-2 mt-1 text-sm">
+          <option value="">回答しない</option>
+          <option value="男性">男性</option>
+          <option value="女性">女性</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="mb-5">
+        <label class="text-xs" style="color:#8A8271">髪型（任意）</label>
+        <input type="text" id="editHairStyle" placeholder="例：ショートヘア、パーマ、坊主" class="w-full px-3 py-2 mt-1 text-sm">
+      </div>
+      <div class="mb-5">
+        <p class="text-xs" style="color:#8A8271">普段の系統（複数選択可・任意）</p>
+        <div id="editUsualStyleChips" class="flex flex-wrap gap-2 mt-1"></div>
+        <input type="text" id="editUsualStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+      <div class="mb-6">
+        <p class="text-xs" style="color:#8A8271">避けたい要素（複数選択可・任意）</p>
+        <div id="editNgElementsChips" class="flex flex-wrap gap-2 mt-1"></div>
+        <input type="text" id="editNgElementsOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+      <button id="saveProfileBtn" class="btn-primary w-full py-2.5 text-sm">プロフィールを保存</button>
+      <p id="profileSavedMsg" class="text-xs mt-2 hidden" style="color:var(--olive-deep)">保存しました。</p>
+      <p id="profileError" class="text-xs mt-2 hidden" style="color:var(--clay)"></p>
     </div>
   </section>
 
@@ -489,15 +531,21 @@ function bindMainTabs() {
     switchMainTab('photos');
     renderPhotoSlots();
   });
+  document.getElementById('tabProfile').addEventListener('click', () => {
+    switchMainTab('profile');
+    loadProfileForEdit();
+  });
 }
 
 function switchMainTab(tab) {
   document.getElementById('tabConsult').classList.toggle('active', tab === 'consult');
   document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
   document.getElementById('tabPhotos').classList.toggle('active', tab === 'photos');
+  document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
   document.getElementById('consultView').classList.toggle('hidden', tab !== 'consult');
   document.getElementById('historyView').classList.toggle('hidden', tab !== 'history');
   document.getElementById('photosView').classList.toggle('hidden', tab !== 'photos');
+  document.getElementById('profileView').classList.toggle('hidden', tab !== 'profile');
 }
 
 // ============================================================
@@ -677,6 +725,109 @@ async function uploadPhoto(angle, file, btn) {
 
   btn.disabled = false;
   btn.textContent = originalText;
+}
+
+// ============================================================
+// プロフィール編集
+// ============================================================
+let editState = { selectedUsualStyle: new Set(), selectedNgElements: new Set() };
+
+async function loadProfileForEdit() {
+  document.getElementById('profileSavedMsg').classList.add('hidden');
+  document.getElementById('profileError').classList.add('hidden');
+
+  const res = await callApi('getProfile', { token: state.token });
+  if (!res.success) {
+    document.getElementById('profileError').textContent = res.error || 'プロフィールの取得に失敗しました。';
+    document.getElementById('profileError').classList.remove('hidden');
+    return;
+  }
+
+  const p = res.profile;
+  document.getElementById('editAgeGroup').value = p.ageGroup || '20代';
+  document.getElementById('editGender').value = p.gender || '';
+  document.getElementById('editHairStyle').value = p.hairStyle || '';
+
+  editState.selectedUsualStyle = new Set((p.usualStyle || '').split('、').filter(Boolean));
+  editState.selectedNgElements = new Set((p.ngElements || '').split('、').filter(Boolean));
+
+  renderEditChipGroup('editUsualStyleChips', USUAL_STYLE_OPTIONS, editState.selectedUsualStyle, 'editUsualStyleOther');
+  renderEditChipGroup('editNgElementsChips', NG_ELEMENT_OPTIONS, editState.selectedNgElements, 'editNgElementsOther');
+}
+
+function renderEditChipGroup(containerId, options, selectedSet, otherInputId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const otherInput = document.getElementById(otherInputId);
+  let otherValue = '';
+
+  options.forEach((option) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = option;
+    btn.className = 'chip px-3 py-1.5 rounded-full text-xs';
+    const isSelected = selectedSet.has(option) || (option === 'その他' && Array.from(selectedSet).some((v) => !options.includes(v)));
+    if (isSelected) btn.classList.add('selected');
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('selected')) {
+        selectedSet.delete(option);
+        btn.classList.remove('selected');
+      } else {
+        selectedSet.add(option);
+        btn.classList.add('selected');
+      }
+      if (option === 'その他') {
+        otherInput.classList.toggle('hidden', !btn.classList.contains('selected'));
+      }
+    });
+    container.appendChild(btn);
+  });
+
+  // 未知の値（自由入力分）を「その他」欄へ
+  const unknownValues = Array.from(selectedSet).filter((v) => !options.includes(v));
+  if (unknownValues.length) {
+    otherValue = unknownValues.join('、');
+    otherInput.value = otherValue;
+    otherInput.classList.remove('hidden');
+  } else {
+    otherInput.value = '';
+  }
+}
+
+document.getElementById('saveProfileBtn')?.addEventListener('click', saveProfile);
+
+async function saveProfile() {
+  const errEl = document.getElementById('profileError');
+  const savedEl = document.getElementById('profileSavedMsg');
+  errEl.classList.add('hidden');
+  savedEl.classList.add('hidden');
+
+  const usualStyleList = Array.from(editState.selectedUsualStyle).filter((v) => v !== 'その他' && USUAL_STYLE_OPTIONS.includes(v));
+  const otherStyle = document.getElementById('editUsualStyleOther').value.trim();
+  if (otherStyle) usualStyleList.push(otherStyle);
+
+  const ngElementsList = Array.from(editState.selectedNgElements).filter((v) => v !== 'その他' && NG_ELEMENT_OPTIONS.includes(v));
+  const otherNg = document.getElementById('editNgElementsOther').value.trim();
+  if (otherNg) ngElementsList.push(otherNg);
+
+  const payload = {
+    token: state.token,
+    ageGroup: document.getElementById('editAgeGroup').value,
+    gender: document.getElementById('editGender').value,
+    hairStyle: document.getElementById('editHairStyle').value.trim(),
+    usualStyle: usualStyleList.join('、'),
+    ngElements: ngElementsList.join('、')
+  };
+
+  const res = await callApi('updateProfile', payload);
+  if (res.success) {
+    Object.assign(state.user, res.profile);
+    localStorage.setItem('stylistai_user', JSON.stringify(state.user));
+    savedEl.classList.remove('hidden');
+  } else {
+    errEl.textContent = res.error || '保存に失敗しました。';
+    errEl.classList.remove('hidden');
+  }
 }
 
 // ============================================================
