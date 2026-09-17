@@ -231,6 +231,24 @@
       </div>
 
       <div class="mb-5">
+        <p class="text-sm mb-2 serif">トップスの色（複数選択可・任意）</p>
+        <div id="topColorChips" class="flex flex-wrap gap-2"></div>
+        <input type="text" id="topColorOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+
+      <div class="mb-5">
+        <p class="text-sm mb-2 serif">ボトムスの色（複数選択可・任意）</p>
+        <div id="bottomColorChips" class="flex flex-wrap gap-2"></div>
+        <input type="text" id="bottomColorOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+
+      <div class="mb-6">
+        <p class="text-sm mb-2 serif">トップスのスタイル（複数選択可・任意）</p>
+        <div id="topStyleChips" class="flex flex-wrap gap-2"></div>
+        <input type="text" id="topStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+
+      <div class="mb-5">
         <label class="text-sm serif block mb-1">今日のシーン / TPO</label>
         <div class="relative">
           <input type="text" id="inputScene" placeholder="例：休日のカフェ、きれいめディナー、公園でのんびり" class="w-full px-3 py-2 pr-11 text-sm">
@@ -376,6 +394,9 @@ const BRAND_OPTIONS = [
 ];
 const USUAL_STYLE_OPTIONS = ['シンプル', 'カジュアル', 'きれいめ', 'ナチュラル', 'モード', 'フェミニン', 'ストリート', 'スポーティ', 'その他'];
 const NG_ELEMENT_OPTIONS = ['露出が多い服', '派手な柄', 'タイトなシルエット', '原色づかい', 'フリル・レース', 'ロゴが目立つ服', 'その他'];
+const TOP_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'その他'];
+const BOTTOM_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'その他'];
+const TOP_STYLE_OPTIONS = ['Tシャツ', 'シャツ', 'ニット', 'スウェット', 'パーカー', 'ブラウス', 'カットソー', 'ポロシャツ', 'ジャケット感', 'その他'];
 const PHOTO_ANGLES = [
   { key: 'front', label: '正面（必須）' },
   { key: 'back', label: '後ろ' },
@@ -388,7 +409,10 @@ let state = {
   user: JSON.parse(localStorage.getItem('stylistai_user') || 'null'),
   selectedBrands: new Set(),
   selectedUsualStyle: new Set(),
-  selectedNgElements: new Set()
+  selectedNgElements: new Set(),
+  selectedTopColors: new Set(),
+  selectedBottomColors: new Set(),
+  selectedTopStyles: new Set()
 };
 
 // ============================================================
@@ -411,6 +435,9 @@ function init() {
   renderBrandChips();
   renderChipGroup('usualStyleChips', USUAL_STYLE_OPTIONS, state.selectedUsualStyle, 'regUsualStyleOther');
   renderChipGroup('ngElementsChips', NG_ELEMENT_OPTIONS, state.selectedNgElements, 'regNgElementsOther');
+  renderChipGroup('topColorChips', TOP_COLOR_OPTIONS, state.selectedTopColors, 'topColorOther');
+  renderChipGroup('bottomColorChips', BOTTOM_COLOR_OPTIONS, state.selectedBottomColors, 'bottomColorOther');
+  renderChipGroup('topStyleChips', TOP_STYLE_OPTIONS, state.selectedTopStyles, 'topStyleOther');
   bindPasswordToggles();
   bindVoiceInput();
   bindAuthTabs();
@@ -722,6 +749,17 @@ function renderBrandChips() {
   renderChipGroup('brandChips', BRAND_OPTIONS, state.selectedBrands, 'brandOther');
 }
 
+// 選択済みチップ＋「その他」自由入力欄の値をまとめて配列にする
+function collectChipValues(selectedSet, otherInputId) {
+  const values = Array.from(selectedSet).filter((v) => v !== 'その他');
+  const otherEl = document.getElementById(otherInputId);
+  const otherVal = otherEl ? otherEl.value.trim() : '';
+  if (selectedSet.has('その他') && otherVal) {
+    otherVal.split(/[、,]/).map((s) => s.trim()).filter(Boolean).forEach((v) => values.push(v));
+  }
+  return values;
+}
+
 // ============================================================
 // 提案生成
 // ============================================================
@@ -751,9 +789,14 @@ async function generateProposal() {
     otherBrand.split(/[、,]/).map((s) => s.trim()).filter(Boolean).forEach((b) => brandList.push(b));
   }
 
+  const topColors = collectChipValues(state.selectedTopColors, 'topColorOther');
+  const bottomColors = collectChipValues(state.selectedBottomColors, 'bottomColorOther');
+  const topStyles = collectChipValues(state.selectedTopStyles, 'topStyleOther');
+
   const res = await callApi('generateProposal', {
     token: state.token,
     brands: brandList,
+    topColors, bottomColors, topStyles,
     scene, mood, temperature, ownedItems
   });
 
