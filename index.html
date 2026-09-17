@@ -248,6 +248,12 @@
         <input type="text" id="topStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
       </div>
 
+      <div class="mb-6">
+        <p class="text-sm mb-2 serif">ボトムスのスタイル（複数選択可・任意）</p>
+        <div id="bottomStyleChips" class="flex flex-wrap gap-2"></div>
+        <input type="text" id="bottomStyleOther" placeholder="その他（自由入力）" class="w-full px-3 py-2 mt-2 text-sm hidden">
+      </div>
+
       <div class="mb-5">
         <label class="text-sm serif block mb-1">今日のシーン / TPO</label>
         <div class="relative">
@@ -397,6 +403,7 @@ const NG_ELEMENT_OPTIONS = ['露出が多い服', '派手な柄', 'タイトな�
 const TOP_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'その他'];
 const BOTTOM_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'その他'];
 const TOP_STYLE_OPTIONS = ['Tシャツ', 'シャツ', 'ニット', 'スウェット', 'パーカー', 'ブラウス', 'カットソー', 'ポロシャツ', 'ジャケット感', 'その他'];
+const BOTTOM_STYLE_OPTIONS = ['デニム', 'チノパン', 'スラックス', 'ワイドパンツ', 'テーパードパンツ', 'ショートパンツ', 'スカート', 'ワンピース', 'その他'];
 const PHOTO_ANGLES = [
   { key: 'front', label: '正面（必須）' },
   { key: 'back', label: '後ろ' },
@@ -412,7 +419,8 @@ let state = {
   selectedNgElements: new Set(),
   selectedTopColors: new Set(),
   selectedBottomColors: new Set(),
-  selectedTopStyles: new Set()
+  selectedTopStyles: new Set(),
+  selectedBottomStyles: new Set()
 };
 
 // ============================================================
@@ -438,6 +446,7 @@ function init() {
   renderChipGroup('topColorChips', TOP_COLOR_OPTIONS, state.selectedTopColors, 'topColorOther');
   renderChipGroup('bottomColorChips', BOTTOM_COLOR_OPTIONS, state.selectedBottomColors, 'bottomColorOther');
   renderChipGroup('topStyleChips', TOP_STYLE_OPTIONS, state.selectedTopStyles, 'topStyleOther');
+  renderChipGroup('bottomStyleChips', BOTTOM_STYLE_OPTIONS, state.selectedBottomStyles, 'bottomStyleOther');
   bindPasswordToggles();
   bindVoiceInput();
   bindAuthTabs();
@@ -792,11 +801,12 @@ async function generateProposal() {
   const topColors = collectChipValues(state.selectedTopColors, 'topColorOther');
   const bottomColors = collectChipValues(state.selectedBottomColors, 'bottomColorOther');
   const topStyles = collectChipValues(state.selectedTopStyles, 'topStyleOther');
+  const bottomStyles = collectChipValues(state.selectedBottomStyles, 'bottomStyleOther');
 
   const res = await callApi('generateProposal', {
     token: state.token,
     brands: brandList,
-    topColors, bottomColors, topStyles,
+    topColors, bottomColors, topStyles, bottomStyles,
     scene, mood, temperature, ownedItems
   });
 
