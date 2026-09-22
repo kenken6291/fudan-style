@@ -89,6 +89,10 @@
     0%,100%{ box-shadow:0 0 0 0 rgba(168,86,46,.4); }
     50%{ box-shadow:0 0 0 6px rgba(168,86,46,0); }
   }
+  .history-row-active{
+    border-color:var(--clay) !important;
+    box-shadow:0 0 0 1px var(--clay);
+  }
 </style>
 </head>
 <body class="min-h-screen">
@@ -1152,7 +1156,11 @@ async function loadHistory() {
     `;
 
     const openBtn = row.querySelector('button');
-    openBtn.addEventListener('click', () => loadHistoryDetail(h.historyId));
+    openBtn.addEventListener('click', () => {
+      listEl.querySelectorAll('.card-line').forEach((el) => el.classList.remove('history-row-active'));
+      row.classList.add('history-row-active');
+      loadHistoryDetail(h.historyId);
+    });
 
     if (compareMode) {
       const checkbox = row.querySelector('.compare-checkbox');
@@ -1206,17 +1214,21 @@ document.getElementById('toggleCompareBtn')?.addEventListener('click', () => {
 
 async function loadHistoryDetail(historyId) {
   const detailEl = document.getElementById('historyDetail');
-  detailEl.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+  detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)"><p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>読み込み中…</p>';
+  // クリック直後に詳細エリアまでスクロールし、「反応がない」ように見えないようにする
+  detailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const res = await callApi('getHistoryDetail', { token: state.token, historyId });
   if (!res.success) {
-    detailEl.innerHTML = `<p class="text-sm" style="color:var(--clay)">${escapeHtml(res.error || '取得に失敗しました。')}</p>`;
+    detailEl.innerHTML = `<hr class="my-6" style="border-color:var(--line)"><p class="text-sm" style="color:var(--clay)">${escapeHtml(res.error || '取得に失敗しました。')}</p>`;
     return;
   }
 
-  detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)">';
-  renderProposal(detailEl, res.detail.proposal);
-  attachTryOnSection(detailEl, res.detail.historyId, res.detail.tryOnImageUrl || '');
+  detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)"><div id="historyDetailBody"></div>';
+  const bodyEl = document.getElementById('historyDetailBody');
+  renderProposal(bodyEl, res.detail.proposal);
+  attachTryOnSection(bodyEl, res.detail.historyId, res.detail.tryOnImageUrl || '');
+  detailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================================
