@@ -93,6 +93,56 @@
     border-color:var(--clay) !important;
     box-shadow:0 0 0 1px var(--clay);
   }
+  /* --- タブバー（5タブ対応） --- */
+  .main-tabs{ overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .main-tabs::-webkit-scrollbar{ display:none; }
+  .main-tabs .tab-btn{ white-space:nowrap; }
+  /* --- 提案モード --- */
+  .mode-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; }
+  .mode-card{
+    border:1px solid var(--line); background:var(--paper-soft);
+    border-radius:.5rem; padding:.7rem .6rem; text-align:left;
+    transition:all .15s ease;
+  }
+  .mode-card .mode-title{ font-family:'Shippori Mincho', serif; font-size:.9rem; line-height:1.3; }
+  .mode-card .mode-sub{ font-size:.68rem; color:#8A8271; margin-top:.25rem; line-height:1.4; }
+  .mode-card.selected{ background:var(--olive-deep); border-color:var(--olive-deep); color:var(--paper-soft); }
+  .mode-card.selected .mode-sub{ color:#D8D2C0; }
+  @media (max-width:420px){ .mode-card .mode-sub{ display:none; } }
+  /* --- 予算入力 --- */
+  .yen-field{ display:flex; align-items:center; gap:.35rem; flex:1; }
+  .yen-field input{ width:100%; }
+  .budget-presets{ display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.5rem; }
+  input[type=number]{ background:var(--paper-soft); border:1px solid var(--line); color:var(--ink); }
+  input[type=number]::-webkit-inner-spin-button{ opacity:.4; }
+  /* --- 価格 --- */
+  .price-tag{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .owned-badge{
+    display:inline-block; font-size:10px; padding:1px 7px; border-radius:9999px;
+    border:1px solid var(--olive); color:var(--olive-deep); background:#E5E7D6; margin-left:.35rem; vertical-align:middle;
+  }
+  .buy-badge{
+    display:inline-block; font-size:10px; padding:1px 7px; border-radius:9999px;
+    border:1px solid var(--clay); color:var(--clay); margin-left:.35rem; vertical-align:middle;
+  }
+  .receipt{
+    background:var(--paper-soft); border:1px solid var(--line); border-radius:.5rem;
+    padding:1rem 1.1rem; position:relative;
+  }
+  .receipt-row{ display:flex; justify-content:space-between; gap:1rem; font-size:.8rem; padding:.3rem 0; border-bottom:1px dashed var(--line); }
+  .receipt-row:last-of-type{ border-bottom:none; }
+  .receipt-total{ display:flex; justify-content:space-between; align-items:baseline; margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--ink); }
+  .receipt-total .amount{ font-family:'Shippori Mincho', serif; font-size:1.6rem; font-variant-numeric:tabular-nums; }
+  .budget-flag{ font-size:.72rem; margin-top:.5rem; }
+  /* --- クローゼット --- */
+  .closet-group-title{ font-family:'Shippori Mincho', serif; font-size:.85rem; margin:1.2rem 0 .4rem; color:var(--olive-deep); }
+  .closet-item{ display:flex; align-items:center; gap:.75rem; border:1px solid var(--line); background:var(--paper-soft); border-radius:.5rem; padding:.6rem .8rem; margin-bottom:.4rem; }
+  .closet-swatch{ width:14px; height:14px; border-radius:50%; border:1px solid var(--line); flex-shrink:0; }
+  .closet-del{ font-size:.7rem; color:#8A8271; text-decoration:underline; flex-shrink:0; }
+  .pick-chip{ border:1px dashed var(--line); background:var(--paper); color:#8A8271; }
+  .pick-chip.selected{ border-style:solid; background:var(--paper-soft); color:var(--ink); border-color:var(--olive); }
+  .pick-chip.selected::before{ content:'✓ '; color:var(--olive-deep); }
+  .form-row2{ display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -219,8 +269,9 @@
 
   <!-- ===== メインアプリ ===== -->
   <section id="mainApp" class="hidden mt-8">
-    <div class="flex gap-6 border-b mb-8" style="border-color:var(--line)">
+    <div class="main-tabs flex gap-6 border-b mb-8" style="border-color:var(--line)">
       <button class="tab-btn active pb-3 text-sm" data-maintab="consult" id="tabConsult">診断する</button>
+      <button class="tab-btn pb-3 text-sm" data-maintab="wardrobe" id="tabWardrobe">クローゼット</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="history" id="tabHistory">履歴</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="photos" id="tabPhotos">マイフォト</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="profile" id="tabProfile">プロフィール</button>
@@ -228,6 +279,43 @@
 
     <!-- --- 診断フォーム --- -->
     <div id="consultView">
+      <div class="mb-6">
+        <p class="text-sm mb-2 serif">どうやってコーデを組む？</p>
+        <div class="mode-grid" id="modeCards">
+          <button type="button" class="mode-card selected" data-mode="new">
+            <p class="mode-title">新しく買う</p>
+            <p class="mode-sub">全部お店でそろえる</p>
+          </button>
+          <button type="button" class="mode-card" data-mode="owned">
+            <p class="mode-title">手持ちだけ</p>
+            <p class="mode-sub">クローゼットの服で組む</p>
+          </button>
+          <button type="button" class="mode-card" data-mode="mix">
+            <p class="mode-title">手持ち＋買い足し</p>
+            <p class="mode-sub">足りない分だけ買う</p>
+          </button>
+        </div>
+
+        <div id="wardrobePickArea" class="hidden mt-5 card-line rounded-lg p-3" style="background:var(--paper-soft)">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs" style="color:#5A543F">使う候補にする手持ちの服（タップで外せます）</p>
+            <button type="button" id="wardrobePickAllBtn" class="text-xs underline" style="color:var(--olive-deep)">全部選ぶ</button>
+          </div>
+          <div id="wardrobePickChips" class="flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+
+      <div class="mb-6" id="budgetArea">
+        <p class="text-sm mb-1 serif">購入予算（任意）</p>
+        <p class="text-xs mb-2" style="color:#8A8271" id="budgetHint">新しく買うアイテムの合計金額（税込）の範囲です</p>
+        <div class="flex items-center gap-2">
+          <label class="yen-field"><span class="text-xs" style="color:#8A8271">¥</span><input type="number" id="budgetMin" min="0" step="1000" inputmode="numeric" placeholder="下限なし" class="px-3 py-2 text-sm"></label>
+          <span class="text-xs" style="color:#8A8271">〜</span>
+          <label class="yen-field"><span class="text-xs" style="color:#8A8271">¥</span><input type="number" id="budgetMax" min="0" step="1000" inputmode="numeric" placeholder="上限なし" class="px-3 py-2 text-sm"></label>
+        </div>
+        <div class="budget-presets" id="budgetPresets"></div>
+      </div>
+
       <div class="mb-6">
         <p class="text-sm mb-2 serif">希望ブランド（複数選択可）</p>
         <div id="brandChips" class="flex flex-wrap gap-2"></div>
@@ -296,6 +384,50 @@
       <p id="consultError" class="text-xs mt-2 hidden" style="color:var(--clay)"></p>
 
       <div id="resultArea" class="mt-10"></div>
+    </div>
+
+    <!-- --- クローゼット（手持ちの服） --- -->
+    <div id="wardrobeView" class="hidden">
+      <p class="text-sm mb-5" style="color:#5A543F">持っている服を登録しておくと、「手持ちだけ」「手持ち＋買い足し」でコーデを提案できます。</p>
+
+      <div class="card-line rounded-lg p-4 mb-6" style="background:var(--paper-soft)">
+        <p class="serif text-base mb-3">服を登録する</p>
+        <div class="form-row2 mb-3">
+          <div>
+            <label class="text-xs" style="color:#8A8271">カテゴリ</label>
+            <select id="wdCategory" class="w-full px-3 py-2 mt-1 text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs" style="color:#8A8271">色</label>
+            <select id="wdColor" class="w-full px-3 py-2 mt-1 text-sm"></select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="text-xs" style="color:#8A8271">アイテム名（必須）</label>
+          <div class="relative mt-1">
+            <input type="text" id="wdName" placeholder="例：オックスフォードシャツ、テーパードチノ、白スニーカー" class="w-full px-3 py-2 pr-11 text-sm">
+            <button type="button" class="mic-btn absolute right-2 top-1/2 -translate-y-1/2" data-target="wdName" title="音声入力">🎤</button>
+          </div>
+        </div>
+        <div class="form-row2 mb-3">
+          <div>
+            <label class="text-xs" style="color:#8A8271">ブランド（任意）</label>
+            <input type="text" id="wdBrand" placeholder="例：ユニクロ" class="w-full px-3 py-2 mt-1 text-sm">
+          </div>
+          <div>
+            <label class="text-xs" style="color:#8A8271">メモ（任意）</label>
+            <input type="text" id="wdMemo" placeholder="例：少し大きめ、厚手" class="w-full px-3 py-2 mt-1 text-sm">
+          </div>
+        </div>
+        <p id="wdError" class="text-xs hidden mb-2" style="color:var(--clay)"></p>
+        <button id="wdAddBtn" type="button" class="btn-primary w-full py-2.5 text-sm">クローゼットに追加</button>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <p class="serif text-base">クローゼットの中身</p>
+        <p id="wdCount" class="text-xs" style="color:#8A8271"></p>
+      </div>
+      <div id="wardrobeList"></div>
     </div>
 
     <!-- --- 履歴 --- -->
@@ -408,6 +540,22 @@ const TOP_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', '
 const BOTTOM_COLOR_OPTIONS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'その他'];
 const TOP_STYLE_OPTIONS = ['Tシャツ', 'シャツ', 'ニット', 'スウェット', 'パーカー', 'ブラウス', 'カットソー', 'ポロシャツ', 'ジャケット感', 'その他'];
 const BOTTOM_STYLE_OPTIONS = ['デニム', 'チノパン', 'スラックス', 'ワイドパンツ', 'テーパードパンツ', 'ショートパンツ', 'スカート', 'ワンピース', 'その他'];
+const WARDROBE_CATEGORIES = ['トップス', 'ボトムス', 'アウター', 'ワンピース', '靴', 'バッグ', '小物'];
+const WARDROBE_COLORS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'ブルー', 'レッド', 'イエロー', 'ピンク', '柄物', 'その他'];
+const COLOR_SWATCH = {
+  '白':'#FAFAF7','ベージュ':'#D9C7A7','グレー':'#9A9A96','ネイビー':'#253552','ブラック':'#1F1F1F','ブラウン':'#6B4A33',
+  'カーキ':'#7A7550','デニムブルー':'#4E6F92','グリーン':'#4D6B4A','ボルドー':'#6D2433','ブルー':'#3E6DB5','レッド':'#B23A32',
+  'イエロー':'#E0B640','ピンク':'#E3A6B4','柄物':'linear-gradient(135deg,#253552 25%,#EFE9DC 25%,#EFE9DC 50%,#253552 50%,#253552 75%,#EFE9DC 75%)'
+};
+const BUDGET_PRESETS = [
+  { label: '〜5千円', min: '', max: 5000 },
+  { label: '〜1万円', min: '', max: 10000 },
+  { label: '1〜2万円', min: 10000, max: 20000 },
+  { label: '2〜3万円', min: 20000, max: 30000 },
+  { label: '3〜5万円', min: 30000, max: 50000 },
+  { label: 'クリア', min: '', max: '' }
+];
+const MODE_LABELS = { new: '新しく買う', owned: '手持ちだけ', mix: '手持ち＋買い足し' };
 const PHOTO_ANGLES = [
   { key: 'front', label: '正面（必須）' },
   { key: 'back', label: '後ろ' },
@@ -424,7 +572,11 @@ let state = {
   selectedTopColors: new Set(),
   selectedBottomColors: new Set(),
   selectedTopStyles: new Set(),
-  selectedBottomStyles: new Set()
+  selectedBottomStyles: new Set(),
+  mode: 'new',
+  wardrobe: [],
+  wardrobeLoaded: false,
+  pickedWardrobe: new Set()
 };
 
 // ============================================================
@@ -458,6 +610,9 @@ function init() {
   bindMainTabs();
   document.getElementById('logoutBtn').addEventListener('click', logout);
   document.getElementById('generateBtn').addEventListener('click', generateProposal);
+  bindModeCards();
+  renderBudgetPresets();
+  initWardrobeForm();
 
   if (state.token && state.user) {
     showMainApp();
@@ -486,6 +641,7 @@ function showMainApp() {
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('headerUser').classList.remove('hidden');
   document.getElementById('headerEmail').textContent = state.user.email;
+  loadWardrobe();
 }
 
 // ============================================================
@@ -698,6 +854,9 @@ async function logout() {
   state.user = null;
   localStorage.removeItem('stylistai_token');
   localStorage.removeItem('stylistai_user');
+  state.wardrobe = [];
+  state.wardrobeLoaded = false;
+  state.pickedWardrobe = new Set();
   showAuthScreen();
 }
 
@@ -709,6 +868,10 @@ function bindMainTabs() {
   document.getElementById('tabHistory').addEventListener('click', () => {
     switchMainTab('history');
     loadHistory();
+  });
+  document.getElementById('tabWardrobe').addEventListener('click', () => {
+    switchMainTab('wardrobe');
+    loadWardrobe();
   });
   document.getElementById('tabPhotos').addEventListener('click', () => {
     switchMainTab('photos');
@@ -723,10 +886,12 @@ function bindMainTabs() {
 function switchMainTab(tab) {
   document.getElementById('tabConsult').classList.toggle('active', tab === 'consult');
   document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('tabWardrobe').classList.toggle('active', tab === 'wardrobe');
   document.getElementById('tabPhotos').classList.toggle('active', tab === 'photos');
   document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
   document.getElementById('consultView').classList.toggle('hidden', tab !== 'consult');
   document.getElementById('historyView').classList.toggle('hidden', tab !== 'history');
+  document.getElementById('wardrobeView').classList.toggle('hidden', tab !== 'wardrobe');
   document.getElementById('photosView').classList.toggle('hidden', tab !== 'photos');
   document.getElementById('profileView').classList.toggle('hidden', tab !== 'profile');
 }
@@ -791,6 +956,27 @@ async function generateProposal() {
     return;
   }
 
+  const budgetMin = document.getElementById('budgetMin').value.trim();
+  const budgetMax = document.getElementById('budgetMax').value.trim();
+  if (state.mode !== 'owned' && budgetMin && budgetMax && Number(budgetMin) > Number(budgetMax)) {
+    errEl.textContent = '予算の下限が上限を超えています。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  if (state.mode !== 'new') {
+    if (!state.wardrobe.length) {
+      errEl.textContent = 'クローゼットに服が登録されていません。「クローゼット」タブから登録してください。';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (!state.pickedWardrobe.size) {
+      errEl.textContent = '使う候補の手持ちの服を1つ以上選んでください。';
+      errEl.classList.remove('hidden');
+      return;
+    }
+  }
+
   const btn = document.getElementById('generateBtn');
   const btnText = document.getElementById('generateBtnText');
   btn.disabled = true;
@@ -811,7 +997,11 @@ async function generateProposal() {
     token: state.token,
     brands: brandList,
     topColors, bottomColors, topStyles, bottomStyles,
-    scene, mood, temperature, ownedItems
+    scene, mood, temperature, ownedItems,
+    mode: state.mode,
+    budgetMin: state.mode === 'owned' ? '' : budgetMin,
+    budgetMax: state.mode === 'owned' ? '' : budgetMax,
+    wardrobeIds: state.mode === 'new' ? [] : Array.from(state.pickedWardrobe)
   });
 
   btn.disabled = false;
@@ -827,17 +1017,92 @@ async function generateProposal() {
   }
 }
 
-function renderProposal(container, proposal) {
-  if (!proposal) { container.innerHTML = ''; return; }
+function formatYen(n) {
+  return '¥' + Number(n || 0).toLocaleString('ja-JP');
+}
 
-  const items = (proposal.items || []).map((item) => `
-    <div class="card-line rounded-lg p-4 mb-3" style="background:var(--paper-soft)">
-      <p class="text-xs" style="color:var(--clay)">${escapeHtml(item.category || '')} ・ ${escapeHtml(item.brand || '')}</p>
-      <p class="serif text-base mt-1">${escapeHtml(item.name || '')}</p>
-      <p class="text-sm mt-2" style="color:#5A543F">${escapeHtml(item.description || '')}</p>
-      ${item.styling_tip ? `<p class="text-xs mt-2" style="color:var(--olive-deep)">Point: ${escapeHtml(item.styling_tip)}</p>` : ''}
+function hasPriceInfo(proposal) {
+  return proposal && typeof proposal.total_price === 'number';
+}
+
+function buildSearchUrl(item) {
+  const q = [item.brand, item.name].filter(Boolean).join(' ');
+  return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+}
+
+function budgetText(min, max) {
+  if (min && max) return formatYen(min) + '〜' + formatYen(max);
+  if (max) return formatYen(max) + '以内';
+  if (min) return formatYen(min) + '以上';
+  return '';
+}
+
+function renderReceipt(proposal) {
+  if (!hasPriceInfo(proposal)) return '';
+  const items = proposal.items || [];
+  const mode = proposal.mode || 'new';
+
+  const rows = items.map((item) => `
+    <div class="receipt-row">
+      <span>${escapeHtml(item.category || '')}　${escapeHtml(item.name || '')}</span>
+      <span class="price-tag" style="color:${item.is_owned ? 'var(--olive-deep)' : 'var(--ink)'}">${item.is_owned ? '手持ち' : formatYen(item.price)}</span>
     </div>
   `).join('');
+
+  const bText = budgetText(proposal.budget_min, proposal.budget_max);
+  let flag = '';
+  if (bText) {
+    flag = proposal.budget_ok
+      ? `<p class="budget-flag" style="color:var(--olive-deep)">✓ 予算 ${bText} の範囲内です</p>`
+      : `<p class="budget-flag" style="color:var(--clay)">予算 ${bText} から外れています。条件を変えてもう一度お試しください。</p>`;
+  }
+
+  const ownedNote = proposal.owned_count ? `<p class="text-xs mt-1" style="color:#8A8271">手持ちの服 ${proposal.owned_count}点を活用</p>` : '';
+  const totalLabel = mode === 'owned' ? '購入なし' : (mode === 'mix' ? '買い足し合計' : '購入合計');
+
+  return `
+    <div class="receipt mb-6">
+      <p class="text-xs mb-2" style="color:#8A8271">このコーデの値段 ・ ${escapeHtml(MODE_LABELS[mode] || '')}</p>
+      ${rows}
+      <div class="receipt-total">
+        <span class="text-sm">${totalLabel}（${proposal.purchase_count || 0}点）</span>
+        <span class="amount">${formatYen(proposal.total_price)}</span>
+      </div>
+      ${ownedNote}
+      ${flag}
+      <p class="text-[10px] mt-2" style="color:#B8AF9C">※価格はAIによる税込定価の目安です。実際の価格・在庫は各ブランドの公式サイトでご確認ください。</p>
+    </div>
+  `;
+}
+
+function renderProposal(container, proposal) {
+  if (!proposal) { container.innerHTML = ''; return; }
+  const priced = hasPriceInfo(proposal);
+
+  const items = (proposal.items || []).map((item) => {
+    let badge = '';
+    let priceHtml = '';
+    if (priced) {
+      badge = item.is_owned ? '<span class="owned-badge">手持ち</span>' : '<span class="buy-badge">購入</span>';
+      priceHtml = item.is_owned ? '' : `<span class="price-tag serif text-base">${formatYen(item.price)}</span>`;
+    }
+    const searchLink = (!item.is_owned && item.name)
+      ? `<a href="${buildSearchUrl(item)}" target="_blank" rel="noopener" class="text-xs underline mt-2 inline-block" style="color:#8A8271">お店で探す ↗</a>`
+      : '';
+    return `
+    <div class="card-line rounded-lg p-4 mb-3" style="background:var(--paper-soft)">
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs" style="color:var(--clay)">${escapeHtml(item.category || '')} ・ ${escapeHtml(item.brand || '')}${badge}</p>
+        ${priceHtml}
+      </div>
+      <p class="serif text-base mt-1">${escapeHtml(item.name || '')}</p>
+      ${item.wardrobe_label ? `<p class="text-xs mt-1" style="color:var(--olive-deep)">クローゼット：${escapeHtml(item.wardrobe_label)}</p>` : ''}
+      <p class="text-sm mt-2" style="color:#5A543F">${escapeHtml(item.description || '')}</p>
+      ${item.styling_tip ? `<p class="text-xs mt-2" style="color:var(--olive-deep)">Point: ${escapeHtml(item.styling_tip)}</p>` : ''}
+      ${searchLink}
+    </div>
+  `;
+  }).join('');
 
   const points = (proposal.styling_points || []).map((p) => `<li class="text-sm mb-1">・${escapeHtml(p)}</li>`).join('');
 
@@ -845,11 +1110,229 @@ function renderProposal(container, proposal) {
     <div class="fade-in">
       <h2 class="serif text-xl mb-1">今日のコーディネート提案</h2>
       ${proposal.coordination_summary ? `<p class="text-sm mb-5" style="color:#5A543F">${escapeHtml(proposal.coordination_summary)}</p>` : ''}
+      ${renderReceipt(proposal)}
       ${items}
       ${points ? `<div class="mt-5"><p class="serif text-sm mb-2">高見えテクニック</p><ul>${points}</ul></div>` : ''}
       ${proposal.stylist_comment ? `<div class="mt-5 p-4 rounded-lg" style="background:var(--olive-deep); color:var(--paper-soft)"><p class="text-xs mb-1">スタイリストより</p><p class="text-sm">${escapeHtml(proposal.stylist_comment)}</p></div>` : ''}
     </div>
   `;
+}
+
+// ============================================================
+// 提案モード・予算
+// ============================================================
+function bindModeCards() {
+  document.querySelectorAll('#modeCards .mode-card').forEach((card) => {
+    card.addEventListener('click', () => setMode(card.dataset.mode));
+  });
+  document.getElementById('wardrobePickAllBtn').addEventListener('click', () => {
+    const allPicked = state.pickedWardrobe.size === state.wardrobe.length;
+    state.pickedWardrobe = allPicked ? new Set() : new Set(state.wardrobe.map((w) => w.itemId));
+    renderWardrobePicker();
+  });
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('#modeCards .mode-card').forEach((c) => c.classList.toggle('selected', c.dataset.mode === mode));
+  document.getElementById('wardrobePickArea').classList.toggle('hidden', mode === 'new');
+  document.getElementById('budgetArea').classList.toggle('hidden', mode === 'owned');
+  document.getElementById('budgetHint').textContent = mode === 'mix'
+    ? '買い足すアイテムの合計金額（税込）の範囲です'
+    : '新しく買うアイテムの合計金額（税込）の範囲です';
+  if (mode !== 'new') {
+    if (!state.wardrobeLoaded) loadWardrobe(); else renderWardrobePicker();
+  }
+}
+
+function renderBudgetPresets() {
+  const wrap = document.getElementById('budgetPresets');
+  wrap.innerHTML = '';
+  BUDGET_PRESETS.forEach((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip px-3 py-1.5 rounded-full text-xs';
+    b.textContent = p.label;
+    b.addEventListener('click', () => {
+      document.getElementById('budgetMin').value = p.min;
+      document.getElementById('budgetMax').value = p.max;
+    });
+    wrap.appendChild(b);
+  });
+}
+
+// ============================================================
+// クローゼット（手持ちの服）
+// ============================================================
+function initWardrobeForm() {
+  const catSel = document.getElementById('wdCategory');
+  catSel.innerHTML = WARDROBE_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+  const colorSel = document.getElementById('wdColor');
+  colorSel.innerHTML = '<option value="">（未指定）</option>' + WARDROBE_COLORS.map((c) => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('wdAddBtn').addEventListener('click', addWardrobeItem);
+  document.getElementById('wdName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addWardrobeItem(); }
+  });
+}
+
+async function loadWardrobe() {
+  if (!state.token) return;
+  const listEl = document.getElementById('wardrobeList');
+  if (!state.wardrobeLoaded) listEl.innerHTML = '<p class="text-sm mt-2" style="color:#8A8271">読み込み中…</p>';
+  const res = await callApi('getWardrobe', { token: state.token });
+  if (!res.success) {
+    listEl.innerHTML = `<p class="text-sm mt-2" style="color:var(--clay)">${escapeHtml(res.error || 'クローゼットの取得に失敗しました。')}</p>`;
+    return;
+  }
+  const firstLoad = !state.wardrobeLoaded;
+  const prevIds = new Set(state.wardrobe.map((w) => w.itemId));
+  state.wardrobe = res.items || [];
+  state.wardrobeLoaded = true;
+  // 初回は全選択、以降は新規追加分を選択状態に
+  if (firstLoad) {
+    state.pickedWardrobe = new Set(state.wardrobe.map((w) => w.itemId));
+  } else {
+    const valid = new Set(state.wardrobe.map((w) => w.itemId));
+    state.pickedWardrobe = new Set(Array.from(state.pickedWardrobe).filter((id) => valid.has(id)));
+    state.wardrobe.forEach((w) => { if (!prevIds.has(w.itemId)) state.pickedWardrobe.add(w.itemId); });
+  }
+  renderWardrobeList();
+  renderWardrobePicker();
+}
+
+function swatchStyle(color) {
+  const v = COLOR_SWATCH[color];
+  if (!v) return 'background:var(--paper)';
+  return v.indexOf('gradient') !== -1 ? `background:${v}` : `background:${v}`;
+}
+
+function wardrobeLabel(w) {
+  return [w.color, w.brand, w.name].filter(Boolean).join(' ');
+}
+
+function renderWardrobeList() {
+  const listEl = document.getElementById('wardrobeList');
+  document.getElementById('wdCount').textContent = state.wardrobe.length ? state.wardrobe.length + '点' : '';
+  if (!state.wardrobe.length) {
+    listEl.innerHTML = '<p class="text-sm mt-2" style="color:#8A8271">まだ登録がありません。よく着る服から登録してみましょう。</p>';
+    return;
+  }
+
+  const groups = {};
+  state.wardrobe.forEach((w) => { (groups[w.category] = groups[w.category] || []).push(w); });
+  const order = WARDROBE_CATEGORIES.concat(Object.keys(groups).filter((c) => !WARDROBE_CATEGORIES.includes(c)));
+
+  listEl.innerHTML = '';
+  order.forEach((cat) => {
+    if (!groups[cat]) return;
+    const title = document.createElement('p');
+    title.className = 'closet-group-title';
+    title.textContent = `${cat}（${groups[cat].length}）`;
+    listEl.appendChild(title);
+
+    groups[cat].forEach((w) => {
+      const row = document.createElement('div');
+      row.className = 'closet-item';
+      row.innerHTML = `
+        <span class="closet-swatch" style="${swatchStyle(w.color)}"></span>
+        <div class="flex-1">
+          <p class="text-sm">${escapeHtml(w.name)}</p>
+          <p class="text-xs" style="color:#8A8271">${escapeHtml([w.color, w.brand, w.memo].filter(Boolean).join(' ・ ') || '　')}</p>
+        </div>
+        <button type="button" class="closet-del">削除</button>
+      `;
+      row.querySelector('.closet-del').addEventListener('click', () => deleteWardrobeItem(w, row));
+      listEl.appendChild(row);
+    });
+  });
+}
+
+function renderWardrobePicker() {
+  const wrap = document.getElementById('wardrobePickChips');
+  const allBtn = document.getElementById('wardrobePickAllBtn');
+  if (!state.wardrobe.length) {
+    wrap.innerHTML = '<p class="text-xs" style="color:#8A8271">クローゼットが空です。<button type="button" id="goClosetBtn" class="underline" style="color:var(--olive-deep)">クローゼットに服を登録する</button></p>';
+    allBtn.classList.add('hidden');
+    document.getElementById('goClosetBtn').addEventListener('click', () => { switchMainTab('wardrobe'); loadWardrobe(); });
+    return;
+  }
+  allBtn.classList.remove('hidden');
+  allBtn.textContent = state.pickedWardrobe.size === state.wardrobe.length ? '全部外す' : '全部選ぶ';
+  wrap.innerHTML = '';
+  state.wardrobe.forEach((w) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip pick-chip px-3 py-1.5 rounded-full text-xs' + (state.pickedWardrobe.has(w.itemId) ? ' selected' : '');
+    b.textContent = `${w.category}：${wardrobeLabel(w)}`;
+    b.addEventListener('click', () => {
+      if (state.pickedWardrobe.has(w.itemId)) state.pickedWardrobe.delete(w.itemId);
+      else state.pickedWardrobe.add(w.itemId);
+      b.classList.toggle('selected');
+      allBtn.textContent = state.pickedWardrobe.size === state.wardrobe.length ? '全部外す' : '全部選ぶ';
+    });
+    wrap.appendChild(b);
+  });
+}
+
+async function addWardrobeItem() {
+  const errEl = document.getElementById('wdError');
+  errEl.classList.add('hidden');
+  const name = document.getElementById('wdName').value.trim();
+  if (!name) {
+    errEl.textContent = 'アイテム名を入力してください。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  const btn = document.getElementById('wdAddBtn');
+  btn.disabled = true;
+  btn.textContent = '追加中…';
+
+  const res = await callApi('addWardrobeItem', {
+    token: state.token,
+    category: document.getElementById('wdCategory').value,
+    color: document.getElementById('wdColor').value,
+    name: name,
+    brand: document.getElementById('wdBrand').value.trim(),
+    memo: document.getElementById('wdMemo').value.trim()
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'クローゼットに追加';
+
+  if (res.success) {
+    state.wardrobe.push(res.item);
+    state.pickedWardrobe.add(res.item.itemId);
+    state.wardrobeLoaded = true;
+    document.getElementById('wdName').value = '';
+    document.getElementById('wdMemo').value = '';
+    // カテゴリ順に並べ直す
+    state.wardrobe.sort((a, b) => {
+      const ca = WARDROBE_CATEGORIES.indexOf(a.category), cb = WARDROBE_CATEGORIES.indexOf(b.category);
+      if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    renderWardrobeList();
+    renderWardrobePicker();
+    document.getElementById('wdName').focus();
+  } else {
+    errEl.textContent = res.error || '登録に失敗しました。';
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function deleteWardrobeItem(w, rowEl) {
+  if (!confirm(`「${w.name}」をクローゼットから削除しますか？`)) return;
+  rowEl.style.opacity = '.4';
+  const res = await callApi('deleteWardrobeItem', { token: state.token, itemId: w.itemId });
+  if (res.success) {
+    state.wardrobe = state.wardrobe.filter((x) => x.itemId !== w.itemId);
+    state.pickedWardrobe.delete(w.itemId);
+    renderWardrobeList();
+    renderWardrobePicker();
+  } else {
+    rowEl.style.opacity = '1';
+    alert(res.error || '削除に失敗しました。');
+  }
 }
 
 // ============================================================
@@ -1139,6 +1622,11 @@ async function loadHistory() {
     row.className = 'card-line rounded-lg p-3 flex items-center gap-3';
     row.style.background = 'var(--paper-soft)';
 
+    const metaParts = [];
+    if (h.mode && MODE_LABELS[h.mode] && h.mode !== 'new') metaParts.push(MODE_LABELS[h.mode]);
+    if (typeof h.totalPrice === 'number' && !isNaN(h.totalPrice)) metaParts.push(h.mode === 'owned' ? '購入なし' : '合計 ' + formatYen(h.totalPrice));
+    const metaHtml = metaParts.length ? `<p class="text-xs mt-1 price-tag" style="color:var(--olive-deep)">${escapeHtml(metaParts.join(' ・ '))}</p>` : '';
+
     const checkboxHtml = compareMode
       ? `<input type="checkbox" class="compare-checkbox flex-shrink-0" ${hasImage ? '' : 'disabled'} ${compareSelection.has(h.historyId) ? 'checked' : ''}>`
       : '';
@@ -1152,6 +1640,7 @@ async function loadHistory() {
       <button type="button" class="flex-1 text-left">
         <p class="text-xs" style="color:#8A8271">${escapeHtml(label)}</p>
         <p class="text-sm mt-1">${escapeHtml(h.summary || h.mood)}</p>
+        ${metaHtml}
       </button>
     `;
 
