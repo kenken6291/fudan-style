@@ -143,6 +143,23 @@
   .pick-chip.selected{ border-style:solid; background:var(--paper-soft); color:var(--ink); border-color:var(--olive); }
   .pick-chip.selected::before{ content:'✓ '; color:var(--olive-deep); }
   .form-row2{ display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+  .closet-thumb{ width:48px; height:48px; border-radius:.35rem; object-fit:cover; flex-shrink:0; background:var(--paper); border:1px solid var(--line); cursor:zoom-in; }
+  /* --- 写真から登録 --- */
+  .photo-actions{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  .btn-outline{ border:1px solid var(--olive-deep); color:var(--olive-deep); background:transparent; transition:all .15s ease; }
+  .btn-outline:hover{ background:var(--olive-deep); color:var(--paper-soft); }
+  .btn-outline:disabled{ opacity:.5; cursor:not-allowed; }
+  .scan-wrap{ display:grid; grid-template-columns:120px 1fr; gap:1rem; align-items:start; margin-top:1rem; }
+  @media (max-width:520px){ .scan-wrap{ grid-template-columns:1fr; } .scan-wrap .scan-photo{ max-width:180px; } }
+  .scan-photo{ width:100%; border-radius:.5rem; border:1px solid var(--line); }
+  .cand-card{ border:1px solid var(--line); background:var(--paper); border-radius:.5rem; padding:.75rem; margin-bottom:.6rem; }
+  .cand-card.done{ opacity:.55; }
+  .cand-card input, .cand-card select{ font-size:.8rem; padding:.35rem .5rem; width:100%; }
+  .cand-grid{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.5rem; }
+  .divider-text{ display:flex; align-items:center; gap:.75rem; font-size:.7rem; color:#8A8271; margin:1.25rem 0; }
+  .divider-text::before, .divider-text::after{ content:''; flex:1; border-top:1px solid var(--line); }
+  .img-modal{ position:fixed; inset:0; background:rgba(43,43,38,.8); display:flex; align-items:center; justify-content:center; z-index:50; padding:1.5rem; }
+  .img-modal img{ max-height:85vh; max-width:100%; border-radius:.5rem; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -391,7 +408,19 @@
       <p class="text-sm mb-5" style="color:#5A543F">持っている服を登録しておくと、「手持ちだけ」「手持ち＋買い足し」でコーデを提案できます。</p>
 
       <div class="card-line rounded-lg p-4 mb-6" style="background:var(--paper-soft)">
-        <p class="serif text-base mb-3">服を登録する</p>
+        <p class="serif text-base mb-1">写真から登録する</p>
+        <p class="text-xs mb-3" style="color:#8A8271">服を撮ると、AIが種類・色・名前を読み取ります。何点か並べて撮ってもOK。</p>
+        <div class="photo-actions">
+          <button type="button" id="wdCameraBtn" class="btn-outline rounded py-2.5 text-sm">📷 カメラで撮る</button>
+          <button type="button" id="wdPickBtn" class="btn-outline rounded py-2.5 text-sm">🖼 写真を選ぶ</button>
+        </div>
+        <input type="file" accept="image/*" capture="environment" id="wdCameraInput" class="hidden">
+        <input type="file" accept="image/*" id="wdPickInput" class="hidden">
+        <p id="wdScanError" class="text-xs hidden mt-2" style="color:var(--clay)"></p>
+        <div id="wdScanResult"></div>
+
+        <p class="divider-text">または手入力で登録</p>
+
         <div class="form-row2 mb-3">
           <div>
             <label class="text-xs" style="color:#8A8271">カテゴリ</label>
@@ -1170,6 +1199,16 @@ function initWardrobeForm() {
   const colorSel = document.getElementById('wdColor');
   colorSel.innerHTML = '<option value="">（未指定）</option>' + WARDROBE_COLORS.map((c) => `<option value="${c}">${c}</option>`).join('');
   document.getElementById('wdAddBtn').addEventListener('click', addWardrobeItem);
+  const camInput = document.getElementById('wdCameraInput');
+  const pickInput = document.getElementById('wdPickInput');
+  document.getElementById('wdCameraBtn').addEventListener('click', () => camInput.click());
+  document.getElementById('wdPickBtn').addEventListener('click', () => pickInput.click());
+  [camInput, pickInput].forEach((inp) => {
+    inp.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) scanWardrobePhoto(e.target.files[0]);
+      e.target.value = '';
+    });
+  });
   document.getElementById('wdName').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addWardrobeItem(); }
   });
@@ -1233,8 +1272,11 @@ function renderWardrobeList() {
     groups[cat].forEach((w) => {
       const row = document.createElement('div');
       row.className = 'closet-item';
+      const lead = w.photoUrl
+        ? `<img src="${escapeHtml(w.photoUrl)}" class="closet-thumb" alt="" loading="lazy">`
+        : `<span class="closet-swatch" style="${swatchStyle(w.color)}"></span>`;
       row.innerHTML = `
-        <span class="closet-swatch" style="${swatchStyle(w.color)}"></span>
+        ${lead}
         <div class="flex-1">
           <p class="text-sm">${escapeHtml(w.name)}</p>
           <p class="text-xs" style="color:#8A8271">${escapeHtml([w.color, w.brand, w.memo].filter(Boolean).join(' ・ ') || '　')}</p>
@@ -1242,6 +1284,8 @@ function renderWardrobeList() {
         <button type="button" class="closet-del">削除</button>
       `;
       row.querySelector('.closet-del').addEventListener('click', () => deleteWardrobeItem(w, row));
+      const thumb = row.querySelector('.closet-thumb');
+      if (thumb) thumb.addEventListener('click', () => openImageModal(w.photoUrl));
       listEl.appendChild(row);
     });
   });
@@ -1300,24 +1344,164 @@ async function addWardrobeItem() {
   btn.textContent = 'クローゼットに追加';
 
   if (res.success) {
-    state.wardrobe.push(res.item);
-    state.pickedWardrobe.add(res.item.itemId);
-    state.wardrobeLoaded = true;
+    insertWardrobeItem(res.item);
     document.getElementById('wdName').value = '';
     document.getElementById('wdMemo').value = '';
-    // カテゴリ順に並べ直す
-    state.wardrobe.sort((a, b) => {
-      const ca = WARDROBE_CATEGORIES.indexOf(a.category), cb = WARDROBE_CATEGORIES.indexOf(b.category);
-      if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
-    renderWardrobeList();
-    renderWardrobePicker();
     document.getElementById('wdName').focus();
   } else {
     errEl.textContent = res.error || '登録に失敗しました。';
     errEl.classList.remove('hidden');
   }
+}
+
+function insertWardrobeItem(item) {
+  state.wardrobe.push(item);
+  state.pickedWardrobe.add(item.itemId);
+  state.wardrobeLoaded = true;
+  // カテゴリ順に並べ直す
+  state.wardrobe.sort((a, b) => {
+    const ca = WARDROBE_CATEGORIES.indexOf(a.category), cb = WARDROBE_CATEGORIES.indexOf(b.category);
+    if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+  renderWardrobeList();
+  renderWardrobePicker();
+}
+
+// ------------------------------------------------------------
+// 写真から登録（Geminiで読み取り）
+// ------------------------------------------------------------
+function setPhotoButtonsDisabled(disabled) {
+  document.getElementById('wdCameraBtn').disabled = disabled;
+  document.getElementById('wdPickBtn').disabled = disabled;
+}
+
+async function scanWardrobePhoto(file) {
+  const errEl = document.getElementById('wdScanError');
+  const resultEl = document.getElementById('wdScanResult');
+  errEl.classList.add('hidden');
+  setPhotoButtonsDisabled(true);
+
+  let base64;
+  try {
+    base64 = await resizeImageToBase64(file, 1024);
+  } catch (e) {
+    errEl.textContent = '画像を読み込めませんでした。別の写真でお試しください。';
+    errEl.classList.remove('hidden');
+    setPhotoButtonsDisabled(false);
+    return;
+  }
+
+  const previewSrc = 'data:image/jpeg;base64,' + base64;
+  resultEl.innerHTML = `
+    <div class="scan-wrap">
+      <img src="${previewSrc}" class="scan-photo" alt="">
+      <p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>AIが服を読み取り中…</p>
+    </div>`;
+
+  const res = await callApi('analyzeWardrobePhoto', { token: state.token, imageBase64: base64, mimeType: 'image/jpeg' });
+  setPhotoButtonsDisabled(false);
+
+  if (!res.success) {
+    resultEl.innerHTML = '';
+    errEl.textContent = res.error || '読み取りに失敗しました。';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  renderScanCandidates(res.photoUrl, previewSrc, res.items || []);
+}
+
+function optionsHtml(list, selected, withEmpty) {
+  const head = withEmpty ? `<option value="">（未指定）</option>` : '';
+  return head + list.map((v) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+}
+
+function renderScanCandidates(photoUrl, previewSrc, items) {
+  const resultEl = document.getElementById('wdScanResult');
+  const cards = items.map((it, i) => `
+    <div class="cand-card" data-idx="${i}">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs" style="color:var(--clay)">候補 ${i + 1}</p>
+        <button type="button" class="cand-add btn-primary rounded px-3 py-1.5 text-xs">この服を登録</button>
+      </div>
+      <input type="text" class="cand-name mt-2" value="${escapeHtml(it.name)}" placeholder="アイテム名">
+      <div class="cand-grid">
+        <select class="cand-category">${optionsHtml(WARDROBE_CATEGORIES, it.category, false)}</select>
+        <select class="cand-color">${optionsHtml(WARDROBE_COLORS, it.color, true)}</select>
+        <input type="text" class="cand-brand" value="${escapeHtml(it.brand)}" placeholder="ブランド（任意）">
+        <input type="text" class="cand-memo" value="${escapeHtml(it.memo)}" placeholder="メモ（任意）">
+      </div>
+    </div>
+  `).join('');
+
+  resultEl.innerHTML = `
+    <div class="scan-wrap fade-in">
+      <img src="${previewSrc}" class="scan-photo" alt="">
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs" style="color:#5A543F">${items.length}点見つかりました。内容を確認して登録してください。</p>
+          ${items.length > 1 ? '<button type="button" id="candAddAllBtn" class="text-xs underline" style="color:var(--olive-deep)">まとめて登録</button>' : ''}
+        </div>
+        ${cards}
+        <button type="button" id="candCloseBtn" class="text-xs underline" style="color:#8A8271">閉じる</button>
+      </div>
+    </div>`;
+
+  resultEl.querySelectorAll('.cand-card').forEach((card) => {
+    card.querySelector('.cand-add').addEventListener('click', () => registerCandidate(card, photoUrl));
+  });
+  const addAll = document.getElementById('candAddAllBtn');
+  if (addAll) {
+    addAll.addEventListener('click', async () => {
+      addAll.disabled = true;
+      for (const card of resultEl.querySelectorAll('.cand-card:not(.done)')) {
+        await registerCandidate(card, photoUrl);
+      }
+      addAll.disabled = false;
+    });
+  }
+  document.getElementById('candCloseBtn').addEventListener('click', () => { resultEl.innerHTML = ''; });
+}
+
+async function registerCandidate(card, photoUrl) {
+  if (card.classList.contains('done')) return;
+  const btn = card.querySelector('.cand-add');
+  const name = card.querySelector('.cand-name').value.trim();
+  if (!name) {
+    card.querySelector('.cand-name').focus();
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '登録中…';
+
+  const res = await callApi('addWardrobeItem', {
+    token: state.token,
+    category: card.querySelector('.cand-category').value,
+    color: card.querySelector('.cand-color').value,
+    name: name,
+    brand: card.querySelector('.cand-brand').value.trim(),
+    memo: card.querySelector('.cand-memo').value.trim(),
+    photoUrl: photoUrl
+  });
+
+  if (res.success) {
+    insertWardrobeItem(res.item);
+    card.classList.add('done');
+    btn.textContent = '登録済み ✓';
+    card.querySelectorAll('input, select').forEach((el) => { el.disabled = true; });
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'この服を登録';
+    alert(res.error || '登録に失敗しました。');
+  }
+}
+
+function openImageModal(url) {
+  const modal = document.createElement('div');
+  modal.className = 'img-modal';
+  modal.innerHTML = `<img src="${escapeHtml(url)}" alt="">`;
+  modal.addEventListener('click', () => modal.remove());
+  document.body.appendChild(modal);
 }
 
 async function deleteWardrobeItem(w, rowEl) {

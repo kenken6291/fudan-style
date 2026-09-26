@@ -12,11 +12,12 @@
  *   シート「Users」   : UserID / Email / PasswordHash / Salt / RegisteredAt / AgeGroup / UsualStyle / NgElements / PhotoFront / PhotoBack / PhotoLeft / PhotoRight / Gender / HairStyle / PasswordResetRequired
  *   シート「History」 : HistoryID / UserID / CreatedAt / Brands / Scene / Mood / Temperature / OwnedItems / ResultJSON / TryOnImageUrl
  *                       / TopColors / BottomColors / TopStyles / BottomStyles / Mode / BudgetMin / BudgetMax / TotalPrice
- *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt （手持ちの服）
+ *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt / PhotoUrl （手持ちの服）
  *
  * ■Googleドライブ
  *   マイフォト保存先　: 「FudanStyle_UserPhotos」フォルダ（ユーザーごとにサブフォルダ）
  *   試着イメージ保存先: 「FudanStyle_TryOnResults」フォルダ（ユーザーごとにサブフォルダ）
+ *   クローゼット写真　: 「FudanStyle_Wardrobe」フォルダ（ユーザーごとにサブフォルダ）
  *   ※LightX APIが画像を取得できるよう、保存した画像は「リンクを知っている全員が閲覧可」で共有されます。
  */
 
@@ -26,6 +27,7 @@ const LIGHTX_OUTFIT_URL = 'https://api.lightxeditor.com/external/api/v1/outfit';
 const LIGHTX_STATUS_URL = 'https://api.lightxeditor.com/external/api/v1/order-status';
 const USER_PHOTOS_FOLDER = 'FudanStyle_UserPhotos';
 const TRYON_RESULTS_FOLDER = 'FudanStyle_TryOnResults';
+const WARDROBE_PHOTOS_FOLDER = 'FudanStyle_Wardrobe';
 
 // ============================================================
 // エントリーポイント
@@ -91,6 +93,9 @@ function doPost(e) {
       case 'deleteWardrobeItem':
         result = handleDeleteWardrobeItem(body);
         break;
+      case 'analyzeWardrobePhoto':
+        result = handleAnalyzeWardrobePhoto(body);
+        break;
       default:
         result = { success: false, error: '不明なアクションです: ' + action };
     }
@@ -137,7 +142,7 @@ function getWardrobeSheet_() {
   let sheet = ss.getSheetByName('Wardrobe');
   if (!sheet) {
     sheet = ss.insertSheet('Wardrobe');
-    sheet.appendRow(['ItemID', 'UserID', 'Category', 'Name', 'Color', 'Brand', 'Memo', 'CreatedAt']);
+    sheet.appendRow(['ItemID', 'UserID', 'Category', 'Name', 'Color', 'Brand', 'Memo', 'CreatedAt', 'PhotoUrl']);
   }
   return sheet;
 }
@@ -558,7 +563,8 @@ function rowToWardrobeItem_(row) {
     color: row[4] || '',
     brand: row[5] || '',
     memo: row[6] || '',
-    createdAt: (row[7] instanceof Date) ? row[7].toISOString() : String(row[7] || '')
+    createdAt: (row[7] instanceof Date) ? row[7].toISOString() : String(row[7] || ''),
+    photoUrl: row[8] || ''
   };
 }
 
@@ -606,7 +612,8 @@ function handleAddWardrobeItem(body) {
     String(body.color || '').trim().slice(0, 50),
     String(body.brand || '').trim().slice(0, 50),
     String(body.memo || '').trim().slice(0, 200),
-    createdAt
+    createdAt,
+    isOwnDriveImageUrl_(body.photoUrl) ? body.photoUrl : ''
   ];
   sheet.appendRow(row);
   return { success: true, item: rowToWardrobeItem_(row) };
@@ -621,11 +628,137 @@ function handleDeleteWardrobeItem(body) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === body.itemId && data[i][1] === userId) {
+      const photoUrl = data[i][8] || '';
       sheet.deleteRow(i + 1);
+      // 同じ写真を使っている他のアイテムが無ければドライブの画像もゴミ箱へ
+      if (photoUrl) {
+        const stillUsed = data.some(function (r, idx) { return idx !== i && idx > 0 && r[8] === photoUrl; });
+        if (!stillUsed) trashDriveImageByUrl_(photoUrl);
+      }
       return { success: true };
     }
   }
   return { success: false, error: 'アイテムが見つかりませんでした。' };
+}
+
+// ------------------------------------------------------------
+// クローゼット：写真からAIで服を読み取る
+// ------------------------------------------------------------
+
+const WARDROBE_COLORS = ['白', 'ベージュ', 'グレー', 'ネイビー', 'ブラック', 'ブラウン', 'カーキ', 'デニムブルー', 'グリーン', 'ボルドー', 'ブルー', 'レッド', 'イエロー', 'ピンク', '柄物', 'その他'];
+
+function isOwnDriveImageUrl_(url) {
+  return typeof url === 'string' && url.indexOf('https://lh3.googleusercontent.com/d/') === 0;
+}
+
+function trashDriveImageByUrl_(url) {
+  try {
+    const m = String(url).match(/\/d\/([^=\/?]+)/);
+    if (m) DriveApp.getFileById(m[1]).setTrashed(true);
+  } catch (e) {
+    // 画像の削除失敗は無視（アイテム削除は成功扱い）
+  }
+}
+
+function handleAnalyzeWardrobePhoto(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) {
+    return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+  }
+  if (!body.imageBase64) {
+    return { success: false, error: '画像データがありません。' };
+  }
+  const mimeType = body.mimeType || 'image/jpeg';
+
+  let items;
+  try {
+    items = callGeminiForWardrobePhoto_(body.imageBase64, mimeType);
+  } catch (err) {
+    return { success: false, error: '写真の読み取りに失敗しました: ' + err.message };
+  }
+
+  if (!items.length) {
+    return { success: false, error: '写真から服を見つけられませんでした。服全体が写るように撮り直してみてください。' };
+  }
+
+  let saved;
+  try {
+    saved = saveBase64ImageToDrive_(WARDROBE_PHOTOS_FOLDER, userId, 'wardrobe_' + new Date().getTime() + '.jpg', body.imageBase64, mimeType);
+  } catch (err) {
+    return { success: false, error: '写真の保存に失敗しました: ' + err.message };
+  }
+
+  return { success: true, photoUrl: saved.directUrl, items: items };
+}
+
+function callGeminiForWardrobePhoto_(imageBase64, mimeType) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEYが設定されていません。');
+  }
+
+  const prompt = [
+    'あなたはアパレルショップの店員です。この写真に写っている「服・靴・バッグ・小物」を読み取り、クローゼット登録用のデータにしてください。',
+    '',
+    '【ルール】',
+    '・写っているアイテムを1点ずつ、最大5点まで挙げてください（人物が着ている場合も、着用している服を1点ずつ）。',
+    '・category は次のいずれかから選んでください: ' + WARDROBE_CATEGORIES.join('、'),
+    '・color は次のいずれかから最も近いものを選んでください: ' + WARDROBE_COLORS.join('、'),
+    '・name は「オックスフォードシャツ」「テーパードチノパン」「白スニーカー」のように、形や素材が分かる短い日本語名にしてください（色は含めない）。',
+    '・brand はロゴやタグでブランドがはっきり読み取れる場合のみ入れ、分からなければ空文字にしてください。推測で入れないでください。',
+    '・memo にはシルエットや素材感など、コーデ提案に役立つ特徴を20文字程度で入れてください（例: 「ゆったりめ・厚手コットン」）。',
+    '・服が写っていない場合は items を空配列にしてください。',
+    '',
+    '【出力形式】JSONのみ',
+    '{ "items": [ { "category": "トップス", "name": "アイテム名", "color": "白", "brand": "", "memo": "特徴" } ] }'
+  ].join('\n');
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + apiKey;
+  const payload = {
+    contents: [{
+      role: 'user',
+      parts: [
+        { inline_data: { mime_type: mimeType, data: imageBase64 } },
+        { text: prompt }
+      ]
+    }],
+    generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error('Gemini APIエラー (' + response.getResponseCode() + '): ' + response.getContentText());
+  }
+
+  const json = JSON.parse(response.getContentText());
+  if (!json.candidates || !json.candidates.length) {
+    throw new Error('Gemini APIから有効な応答が得られませんでした。');
+  }
+  const text = json.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');
+  const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error('AIの応答をJSONとして解析できませんでした。');
+  }
+
+  return (parsed.items || []).slice(0, 5).map(function (it) {
+    return {
+      category: WARDROBE_CATEGORIES.indexOf(it.category) !== -1 ? it.category : 'トップス',
+      name: String(it.name || '').trim().slice(0, 100),
+      color: WARDROBE_COLORS.indexOf(it.color) !== -1 ? it.color : '',
+      brand: String(it.brand || '').trim().slice(0, 50),
+      memo: String(it.memo || '').trim().slice(0, 200)
+    };
+  }).filter(function (it) { return it.name; });
 }
 
 // ============================================================
