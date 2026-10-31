@@ -1738,40 +1738,76 @@ document.getElementById('changePasswordForm')?.addEventListener('submit', async 
 // ============================================================
 // 試着イメージ生成
 // ============================================================
-async function generateTryOnImage(historyId, containerEl) {
-  containerEl.innerHTML = '<p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>試着イメージを作成中…（1分ほどかかります）</p>';
+const TRYON_ENGINE_LABEL = { gemini: 'Gemini', lightx: 'LightX' };
 
-  const res = await callApi('generateTryOnImage', { token: state.token, historyId: historyId });
+async function generateTryOnImage(historyId, containerEl, engine) {
+  engine = engine === 'lightx' ? 'lightx' : 'gemini';
+  const prevUrl = containerEl.dataset.url || '';
+  containerEl.innerHTML = `<p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>${TRYON_ENGINE_LABEL[engine]}で試着イメージを作成中…（30秒〜1分ほどかかります）</p>`;
+
+  const res = await callApi('generateTryOnImage', { token: state.token, historyId: historyId, engine: engine });
   if (res.success) {
-    renderTryOnImage(containerEl, res.tryOnImageUrl);
+    renderTryOnSection(containerEl, historyId, res.tryOnImageUrl);
+    if (typeof compareSelection !== 'undefined' && compareSelection.has(historyId)) {
+      const cur = compareSelection.get(historyId);
+      compareSelection.set(historyId, { imageUrl: res.tryOnImageUrl, label: cur.label });
+    }
   } else {
-    containerEl.innerHTML = `<p class="text-xs" style="color:var(--clay)">${escapeHtml(res.error || '試着イメージの生成に失敗しました。')}</p>`;
+    renderTryOnSection(containerEl, historyId, prevUrl);
+    const err = document.createElement('p');
+    err.className = 'text-xs mt-2';
+    err.style.color = 'var(--clay)';
+    err.textContent = res.error || '試着イメージの生成に失敗しました。';
+    containerEl.appendChild(err);
   }
 }
 
-function renderTryOnImage(containerEl, url) {
-  containerEl.innerHTML = `
-    <p class="text-xs mb-2" style="color:#8A8271">試着イメージ（Googleドライブに保存済み）</p>
-    <img src="${url}" class="w-full rounded-lg card-line">
-    <a href="${url}" target="_blank" class="text-xs underline mt-2 inline-block" style="color:var(--olive-deep)">画像を新しいタブで開く</a>
-  `;
+function renderTryOnSection(containerEl, historyId, url) {
+  containerEl.dataset.url = url || '';
+  containerEl.innerHTML = '';
+
+  if (url) {
+    containerEl.insertAdjacentHTML('beforeend', `
+      <p class="text-xs mb-2" style="color:#8A8271">試着イメージ（Googleドライブに保存済み）</p>
+      <img src="${url}" class="w-full rounded-lg card-line">
+      <a href="${url}" target="_blank" class="text-xs underline mt-2 inline-block" style="color:var(--olive-deep)">画像を新しいタブで開く</a>
+    `);
+  }
+
+  const box = document.createElement('div');
+  box.className = url ? 'mt-3' : '';
+  if (url) {
+    box.insertAdjacentHTML('beforeend', '<p class="text-xs mb-2" style="color:#8A8271">イメージと違うときは作り直せます</p>');
+  }
+  const row = document.createElement('div');
+  row.className = 'flex flex-wrap gap-2';
+
+  const gBtn = document.createElement('button');
+  gBtn.type = 'button';
+  gBtn.className = url ? 'btn-outline rounded px-4 py-2 text-xs' : 'btn-primary px-4 py-2 text-xs';
+  gBtn.textContent = url ? 'Geminiで作り直す' : 'Geminiで試着イメージを作成';
+  gBtn.addEventListener('click', () => generateTryOnImage(historyId, containerEl, 'gemini'));
+
+  const lBtn = document.createElement('button');
+  lBtn.type = 'button';
+  lBtn.className = 'btn-outline rounded px-4 py-2 text-xs';
+  lBtn.textContent = url ? 'LightXで作り直す' : 'LightXで作成';
+  lBtn.addEventListener('click', () => generateTryOnImage(historyId, containerEl, 'lightx'));
+
+  row.appendChild(gBtn);
+  row.appendChild(lBtn);
+  box.appendChild(row);
+  if (!url) {
+    box.insertAdjacentHTML('beforeend', '<p class="text-xs mt-2" style="color:#8A8271">Geminiはクレジット不要（Gemini APIの利用枠内）。LightXはクレジットを消費します。</p>');
+  }
+  containerEl.appendChild(box);
 }
 
 function attachTryOnSection(parentEl, historyId, existingUrl) {
   const wrapper = document.createElement('div');
   wrapper.className = 'mt-5';
   parentEl.appendChild(wrapper);
-
-  if (existingUrl) {
-    renderTryOnImage(wrapper, existingUrl);
-  } else {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn-primary px-4 py-2 text-xs';
-    btn.textContent = 'この着こなしの試着イメージを作成';
-    btn.addEventListener('click', () => generateTryOnImage(historyId, wrapper));
-    wrapper.appendChild(btn);
-  }
+  renderTryOnSection(wrapper, historyId, existingUrl || '');
 }
 // ============================================================
 // 履歴
