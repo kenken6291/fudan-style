@@ -139,6 +139,17 @@
   .closet-item{ display:flex; align-items:center; gap:.75rem; border:1px solid var(--line); background:var(--paper-soft); border-radius:.5rem; padding:.6rem .8rem; margin-bottom:.4rem; }
   .closet-swatch{ width:14px; height:14px; border-radius:50%; border:1px solid var(--line); flex-shrink:0; }
   .closet-del{ font-size:.7rem; color:#8A8271; text-decoration:underline; flex-shrink:0; }
+  .closet-actions{ display:flex; flex-direction:column; gap:.45rem; align-items:flex-end; flex-shrink:0; }
+  .closet-edit{ font-size:.7rem; color:var(--olive-deep); text-decoration:underline; flex-shrink:0; }
+  .closet-item.editing{ flex-wrap:wrap; align-items:flex-start; }
+  .closet-editor{ width:100%; display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.5rem; }
+  .closet-editor .full{ grid-column:1 / -1; }
+  .closet-editor label{ font-size:.7rem; color:#8A8271; display:block; margin-bottom:.15rem; }
+  .closet-editor input, .closet-editor select{ width:100%; padding:.4rem .55rem; font-size:.85rem; }
+  .color-dots{ display:flex; flex-wrap:wrap; gap:.35rem; }
+  .color-dot{ display:inline-flex; align-items:center; gap:.25rem; font-size:.7rem; padding:.2rem .5rem .2rem .25rem; border:1px solid var(--line); border-radius:999px; background:var(--paper); }
+  .color-dot .dot{ width:14px; height:14px; border-radius:50%; border:1px solid var(--line); }
+  .color-dot.selected{ border-color:var(--olive-deep); box-shadow:0 0 0 1px var(--olive-deep) inset; }
   .pick-chip{ border:1px dashed var(--line); background:var(--paper); color:#8A8271; }
   .pick-chip.selected{ border-style:solid; background:var(--paper-soft); color:var(--ink); border-color:var(--olive); }
   .pick-chip.selected::before{ content:'✓ '; color:var(--olive-deep); }
@@ -548,13 +559,39 @@
     </div>
   </section>
 
+  <!-- ===== フッター（バージョン情報） ===== -->
+  <footer class="mt-16 pt-5 border-t text-center text-xs" style="border-color:var(--line); color:#8A8271">
+    <button type="button" id="versionToggle" class="underline">
+      FUDAN, <span id="appVersionLabel">-</span>
+    </button>
+    <div id="versionPanel" class="hidden mt-4 text-left mx-auto max-w-md p-4 rounded-lg card-line" style="background:var(--paper-soft)">
+      <p class="serif text-sm mb-2" style="color:var(--ink, #2E2A24)">バージョン情報</p>
+      <table class="w-full text-xs mb-3">
+        <tr><td class="py-0.5 pr-3">アプリ（画面）</td><td id="verFront">-</td></tr>
+        <tr><td class="py-0.5 pr-3">サーバー（GAS）</td><td id="verApi">確認中…</td></tr>
+        <tr><td class="py-0.5 pr-3">コーデ提案AI</td><td id="verTextModel">-</td></tr>
+        <tr><td class="py-0.5 pr-3">写真読み取りAI</td><td id="verVisionModel">-</td></tr>
+        <tr><td class="py-0.5 pr-3">試着イメージAI</td><td id="verTryOn">-</td></tr>
+        <tr><td class="py-0.5 pr-3">APIバージョン</td><td id="verApiVersions">-</td></tr>
+      </table>
+      <p class="serif text-sm mb-1" style="color:var(--ink, #2E2A24)">更新履歴</p>
+      <div id="changelogList" class="space-y-2"></div>
+    </div>
+  </footer>
+
 </div>
 
+<script src="config.js"></script>
 <script>
 // ============================================================
-// 設定
+// 設定（config.js から読み込み）
 // ============================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec';
+const CONFIG = window.FUDAN_CONFIG || {};
+const API_URL = CONFIG.API_URL || '';
+const APP_VERSION = CONFIG.APP_VERSION || '-';
+if (!API_URL) {
+  alert('config.js が読み込めないか、API_URL が設定されていません。');
+}
 
 const BRAND_OPTIONS = [
   'ユニクロ中心', '無印良品中心', 'GU', 'ワークマン', 'ZARA', 'H&M',
@@ -622,9 +659,71 @@ async function callApi(action, payload) {
 }
 
 // ============================================================
+// バージョン情報
+// ============================================================
+let versionLoaded = false;
+
+function initVersionInfo() {
+  document.getElementById('appVersionLabel').textContent = 'v' + APP_VERSION;
+  document.getElementById('verFront').textContent =
+    'v' + APP_VERSION + (CONFIG.RELEASE_DATE ? '（' + CONFIG.RELEASE_DATE + '）' : '');
+
+  const list = document.getElementById('changelogList');
+  list.innerHTML = '';
+  (CONFIG.CHANGELOG || []).forEach((c) => {
+    const div = document.createElement('div');
+    const head = document.createElement('p');
+    head.className = 'font-medium';
+    head.textContent = 'v' + c.version + (c.date ? '（' + c.date + '）' : '');
+    const ul = document.createElement('ul');
+    ul.className = 'list-disc pl-5';
+    (c.notes || []).forEach((n) => {
+      const li = document.createElement('li');
+      li.textContent = n;
+      ul.appendChild(li);
+    });
+    div.appendChild(head);
+    div.appendChild(ul);
+    list.appendChild(div);
+  });
+
+  document.getElementById('versionToggle').addEventListener('click', () => {
+    const panel = document.getElementById('versionPanel');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden') && !versionLoaded) loadApiVersion();
+  });
+}
+
+async function loadApiVersion() {
+  const apiEl = document.getElementById('verApi');
+  const tryEl = document.getElementById('verTryOn');
+  try {
+    const res = await callApi('getVersion', {});
+    if (res.success) {
+      versionLoaded = true;
+      apiEl.textContent = 'v' + res.apiVersion + (res.releaseDate ? '（' + res.releaseDate + '）' : '');
+      const m = res.models || {};
+      document.getElementById('verTextModel').textContent = m.text || '-';
+      document.getElementById('verVisionModel').textContent = m.vision || '-';
+      tryEl.textContent = (m.image || res.geminiImageModel || '-') + (res.lightxEnabled ? ' / LightX' : '');
+      document.getElementById('verApiVersions').textContent =
+        'Gemini ' + (m.geminiApiVersion || '-') + ' / LightX ' + (m.lightxApiVersion || '-');
+      if (res.apiVersion !== APP_VERSION) {
+        apiEl.insertAdjacentHTML('beforeend', ' <span style="color:var(--clay)">※画面と版が異なります</span>');
+      }
+    } else {
+      apiEl.textContent = '取得できませんでした（GASが旧版の可能性）';
+    }
+  } catch (e) {
+    apiEl.textContent = '接続できませんでした';
+  }
+}
+
+// ============================================================
 // 初期化
 // ============================================================
 function init() {
+  initVersionInfo();
   renderBrandChips();
   renderChipGroup('usualStyleChips', USUAL_STYLE_OPTIONS, state.selectedUsualStyle, 'regUsualStyleOther');
   renderChipGroup('ngElementsChips', NG_ELEMENT_OPTIONS, state.selectedNgElements, 'regNgElementsOther');
@@ -1272,6 +1371,7 @@ function renderWardrobeList() {
     groups[cat].forEach((w) => {
       const row = document.createElement('div');
       row.className = 'closet-item';
+      row.dataset.itemId = w.itemId;
       const lead = w.photoUrl
         ? `<img src="${escapeHtml(w.photoUrl)}" class="closet-thumb" alt="" loading="lazy">`
         : `<span class="closet-swatch" style="${swatchStyle(w.color)}"></span>`;
@@ -1281,9 +1381,13 @@ function renderWardrobeList() {
           <p class="text-sm">${escapeHtml(w.name)}</p>
           <p class="text-xs" style="color:#8A8271">${escapeHtml([w.color, w.brand, w.memo].filter(Boolean).join(' ・ ') || '　')}</p>
         </div>
-        <button type="button" class="closet-del">削除</button>
+        <div class="closet-actions">
+          <button type="button" class="closet-edit">編集</button>
+          <button type="button" class="closet-del">削除</button>
+        </div>
       `;
       row.querySelector('.closet-del').addEventListener('click', () => deleteWardrobeItem(w, row));
+      row.querySelector('.closet-edit').addEventListener('click', () => openWardrobeEditor(w, row));
       const thumb = row.querySelector('.closet-thumb');
       if (thumb) thumb.addEventListener('click', () => openImageModal(w.photoUrl));
       listEl.appendChild(row);
@@ -1502,6 +1606,117 @@ function openImageModal(url) {
   modal.innerHTML = `<img src="${escapeHtml(url)}" alt="">`;
   modal.addEventListener('click', () => modal.remove());
   document.body.appendChild(modal);
+}
+
+// ------------------------------------------------------------
+// クローゼット：編集（色・カテゴリ・名前・ブランド・メモ）
+// ------------------------------------------------------------
+function openWardrobeEditor(w, rowEl) {
+  // 他に開いている編集欄があれば閉じる
+  if (document.querySelector('.closet-item.editing')) renderWardrobeList();
+  const row = rowEl.isConnected ? rowEl : null;
+  const target = row || Array.from(document.querySelectorAll('.closet-item')).find((r) => r.dataset.itemId === w.itemId);
+  if (!target) return;
+
+  target.classList.add('editing');
+  target.querySelector('.closet-actions').classList.add('hidden');
+
+  const cats = WARDROBE_CATEGORIES.includes(w.category) ? WARDROBE_CATEGORIES : WARDROBE_CATEGORIES.concat([w.category]);
+  const colors = (!w.color || WARDROBE_COLORS.includes(w.color)) ? WARDROBE_COLORS : WARDROBE_COLORS.concat([w.color]);
+
+  const ed = document.createElement('div');
+  ed.className = 'closet-editor';
+  ed.innerHTML = `
+    <div class="full">
+      <label>色（タップで選択）</label>
+      <div class="color-dots"></div>
+    </div>
+    <div>
+      <label>カテゴリ</label>
+      <select class="ed-cat">${cats.map((c) => `<option value="${escapeHtml(c)}"${c === w.category ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>
+    </div>
+    <div>
+      <label>ブランド</label>
+      <input type="text" class="ed-brand" value="${escapeHtml(w.brand || '')}">
+    </div>
+    <div class="full">
+      <label>アイテム名（必須）</label>
+      <input type="text" class="ed-name" value="${escapeHtml(w.name || '')}">
+    </div>
+    <div class="full">
+      <label>メモ</label>
+      <input type="text" class="ed-memo" value="${escapeHtml(w.memo || '')}">
+    </div>
+    <p class="ed-error full text-xs hidden" style="color:var(--clay)"></p>
+    <div class="full flex gap-2">
+      <button type="button" class="ed-save btn-primary flex-1 py-2 text-xs">保存</button>
+      <button type="button" class="ed-cancel btn-outline rounded flex-1 py-2 text-xs">キャンセル</button>
+    </div>
+  `;
+  target.appendChild(ed);
+
+  // 色はスウォッチ付きのボタンで選ぶ（未指定も選べる）
+  let selectedColor = w.color || '';
+  const dots = ed.querySelector('.color-dots');
+  ['（未指定）'].concat(colors).forEach((c) => {
+    const val = c === '（未指定）' ? '' : c;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'color-dot' + (val === selectedColor ? ' selected' : '');
+    b.innerHTML = `<span class="dot" style="${val ? swatchStyle(val) : 'background:transparent'}"></span>${escapeHtml(c)}`;
+    b.addEventListener('click', () => {
+      selectedColor = val;
+      dots.querySelectorAll('.color-dot').forEach((x) => x.classList.remove('selected'));
+      b.classList.add('selected');
+    });
+    dots.appendChild(b);
+  });
+
+  ed.querySelector('.ed-cancel').addEventListener('click', () => renderWardrobeList());
+  ed.querySelector('.ed-save').addEventListener('click', async () => {
+    const errEl = ed.querySelector('.ed-error');
+    errEl.classList.add('hidden');
+    const name = ed.querySelector('.ed-name').value.trim();
+    if (!name) {
+      errEl.textContent = 'アイテム名を入力してください。';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const saveBtn = ed.querySelector('.ed-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+
+    const res = await callApi('updateWardrobeItem', {
+      token: state.token,
+      itemId: w.itemId,
+      category: ed.querySelector('.ed-cat').value,
+      color: selectedColor,
+      name: name,
+      brand: ed.querySelector('.ed-brand').value.trim(),
+      memo: ed.querySelector('.ed-memo').value.trim()
+    });
+
+    if (res.success) {
+      const idx = state.wardrobe.findIndex((x) => x.itemId === w.itemId);
+      if (idx !== -1) state.wardrobe[idx] = Object.assign({}, state.wardrobe[idx], res.item);
+      state.wardrobe.sort((a, b) => {
+        const ca = WARDROBE_CATEGORIES.indexOf(a.category), cb = WARDROBE_CATEGORIES.indexOf(b.category);
+        if (ca !== cb) return (ca === -1 ? 99 : ca) - (cb === -1 ? 99 : cb);
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+      renderWardrobeList();
+      renderWardrobePicker();
+    } else {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+      errEl.textContent = res.error || '保存に失敗しました。';
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  ed.querySelector('.ed-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); ed.querySelector('.ed-save').click(); }
+  });
 }
 
 async function deleteWardrobeItem(w, rowEl) {

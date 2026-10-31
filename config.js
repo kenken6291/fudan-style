@@ -8,11 +8,19 @@ window.FUDAN_CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec',
 
   // フロントエンドのバージョン情報
-  APP_VERSION: '2026.10.31',
-  RELEASE_DATE: '2026-10-31',
+  APP_VERSION: '2026.11.01',
+  RELEASE_DATE: '2026-11-01',
 
   // 更新履歴（新しい順）
   CHANGELOG: [
+    { version: '2026.11.01', date: '2026-11-01', notes: [
+      'クローゼットの服を編集できるように（色・カテゴリ・名前・ブランド・メモ）',
+      '色は色見本付きのボタンで選択'
+    ]},
+    { version: '2026.10.31b', date: '2026-10-31', notes: [
+      'Geminiのモデル（提案・写真読み取り・試着画像）とAPIバージョンを設定で切り替え可能に',
+      'バージョン情報に使用中のAIモデルを表示'
+    ]},
     { version: '2026.10.31', date: '2026-10-31', notes: [
       '試着イメージをGeminiでも作成できるようにしました（LightXと選択可）',
       '試着イメージの作り直しに対応',

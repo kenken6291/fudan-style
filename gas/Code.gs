@@ -7,13 +7,24 @@
  *   GEMINI_API_KEY  : Google AI Studioで発行したGemini APIキー
  *   PASSWORD_PEPPER : パスワードハッシュ化用の固定文字列（自分で好きな長い文字列を設定）
  *   LIGHTX_API_KEY  : LightX（lightxeditor.com）のAPIキー（試着イメージ生成用・任意）
- *   GEMINI_IMAGE_MODEL : （任意）試着イメージ生成に使うGemini画像モデル名。未設定時は既定値を使用
+ *
+ * ■AIモデル・APIバージョン設定（任意）
+ *   下の MODEL_SETTINGS が既定値です。スクリプトプロパティに同じ名前で値を入れると、
+ *   コードを書き換えずにそちらが優先されます（モデル更新・提供終了時の切り替え用）。
+ *     キー                  用途                                既定値
+ *     GEMINI_TEXT_MODEL   : コーデ提案に使うモデル              … gemini-3.6-flash
+ *     GEMINI_VISION_MODEL : クローゼット写真の読み取りに使うモデル … gemini-3.6-flash
+ *     GEMINI_IMAGE_MODEL  : 試着イメージ生成に使う画像モデル      … gemini-3.1-flash-image
+ *     GEMINI_API_VERSION  : Gemini APIのバージョン（v1beta / v1） … v1beta
+ *     LIGHTX_API_VERSION  : LightX APIのバージョン（v1 など）    … v1
+ *   ※既定値を変えるときは、下の MODEL_SETTINGS とこの一覧の両方を更新してください。
+ *   現在の設定はエディタで showModelSettings() を実行するとログに表示されます。
  *
  * ■スプレッドシート構成
  *   シート「Users」   : UserID / Email / PasswordHash / Salt / RegisteredAt / AgeGroup / UsualStyle / NgElements / PhotoFront / PhotoBack / PhotoLeft / PhotoRight / Gender / HairStyle / PasswordResetRequired
  *   シート「History」 : HistoryID / UserID / CreatedAt / Brands / Scene / Mood / Temperature / OwnedItems / ResultJSON / TryOnImageUrl
  *                       / TopColors / BottomColors / TopStyles / BottomStyles / Mode / BudgetMin / BudgetMax / TotalPrice
- *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt / PhotoUrl （手持ちの服）
+ *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt / PhotoUrl （手持ちの服・編集可）
  *
  * ■Googleドライブ
  *   マイフォト保存先　: 「FudanStyle_UserPhotos」フォルダ（ユーザーごとにサブフォルダ）
@@ -22,11 +33,59 @@
  *   ※LightX APIが画像を取得できるよう、保存した画像は「リンクを知っている全員が閲覧可」で共有されます。
  */
 
-const GEMINI_MODEL = 'gemini-3.6-flash';
+const API_VERSION = '2026.11.01';
+const API_RELEASE_DATE = '2026-11-01';
 const SESSION_TTL_SEC = 21600; // 6時間（CacheServiceの上限）
-const GEMINI_IMAGE_MODEL_DEFAULT = 'gemini-3.1-flash-image'; // 試着イメージ生成（Nano Banana 2）
-const LIGHTX_OUTFIT_URL = 'https://api.lightxeditor.com/external/api/v1/outfit';
-const LIGHTX_STATUS_URL = 'https://api.lightxeditor.com/external/api/v1/order-status';
+
+// ============================================================
+// AIモデル・APIバージョン設定（既定値）
+//   スクリプトプロパティに同名の値があればそちらを優先
+// ============================================================
+const MODEL_SETTINGS = {
+  GEMINI_TEXT_MODEL:   'gemini-3.6-flash',        // コーデ提案
+  GEMINI_VISION_MODEL: 'gemini-3.6-flash',        // クローゼット写真の読み取り
+  GEMINI_IMAGE_MODEL:  'gemini-3.1-flash-image',  // 試着イメージ生成（Nano Banana 2）
+  GEMINI_API_VERSION:  'v1beta',
+  LIGHTX_API_VERSION:  'v1'
+};
+
+function getSetting_(key) {
+  const v = PropertiesService.getScriptProperties().getProperty(key);
+  return (v && String(v).trim()) || MODEL_SETTINGS[key];
+}
+
+function getGeminiTextModel_()   { return getSetting_('GEMINI_TEXT_MODEL'); }
+function getGeminiVisionModel_() { return getSetting_('GEMINI_VISION_MODEL'); }
+function getGeminiImageModel_()  { return getSetting_('GEMINI_IMAGE_MODEL'); }
+
+function geminiEndpoint_(model) {
+  return 'https://generativelanguage.googleapis.com/' + getSetting_('GEMINI_API_VERSION') +
+    '/models/' + model + ':generateContent';
+}
+
+function lightxEndpoint_(path) {
+  return 'https://api.lightxeditor.com/external/api/' + getSetting_('LIGHTX_API_VERSION') + '/' + path;
+}
+
+// 現在の設定と、その値が「既定値」か「スクリプトプロパティ」由来かを返す
+function getModelSettings_() {
+  const props = PropertiesService.getScriptProperties();
+  const out = {};
+  Object.keys(MODEL_SETTINGS).forEach(function (k) {
+    const p = props.getProperty(k);
+    out[k] = { value: getSetting_(k), source: (p && String(p).trim()) ? 'property' : 'default' };
+  });
+  return out;
+}
+
+// エディタから実行して現在の設定を確認する用
+function showModelSettings() {
+  const s = getModelSettings_();
+  Object.keys(s).forEach(function (k) {
+    Logger.log(k + ' = ' + s[k].value + (s[k].source === 'property' ? '（スクリプトプロパティ）' : '（既定値）'));
+  });
+}
+
 const USER_PHOTOS_FOLDER = 'FudanStyle_UserPhotos';
 const TRYON_RESULTS_FOLDER = 'FudanStyle_TryOnResults';
 const WARDROBE_PHOTOS_FOLDER = 'FudanStyle_Wardrobe';
@@ -36,7 +95,7 @@ const WARDROBE_PHOTOS_FOLDER = 'FudanStyle_Wardrobe';
 // ============================================================
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, message: 'Personal Stylist AI API is running.' }))
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, message: 'Personal Stylist AI API is running.', apiVersion: API_VERSION, releaseDate: API_RELEASE_DATE }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -47,6 +106,9 @@ function doPost(e) {
     const action = body.action;
 
     switch (action) {
+      case 'getVersion':
+        result = handleGetVersion();
+        break;
       case 'register':
         result = handleRegister(body);
         break;
@@ -91,6 +153,9 @@ function doPost(e) {
         break;
       case 'addWardrobeItem':
         result = handleAddWardrobeItem(body);
+        break;
+      case 'updateWardrobeItem':
+        result = handleUpdateWardrobeItem(body);
         break;
       case 'deleteWardrobeItem':
         result = handleDeleteWardrobeItem(body);
@@ -621,6 +686,36 @@ function handleAddWardrobeItem(body) {
   return { success: true, item: rowToWardrobeItem_(row) };
 }
 
+function handleUpdateWardrobeItem(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) {
+    return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+  }
+  const category = String(body.category || '').trim();
+  const name = String(body.name || '').trim();
+  if (!category || !name) {
+    return { success: false, error: 'カテゴリとアイテム名を入力してください。' };
+  }
+
+  const sheet = getWardrobeSheet_();
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === body.itemId && data[i][1] === userId) {
+      const row = data[i].slice(0, 9);
+      while (row.length < 9) row.push('');
+      row[2] = category;
+      row[3] = name.slice(0, 100);
+      row[4] = String(body.color || '').trim().slice(0, 50);
+      row[5] = String(body.brand || '').trim().slice(0, 50);
+      row[6] = String(body.memo || '').trim().slice(0, 200);
+      // 列C〜G（カテゴリ／名前／色／ブランド／メモ）だけ更新。ID・作成日時・写真はそのまま
+      sheet.getRange(i + 1, 3, 1, 5).setValues([[row[2], row[3], row[4], row[5], row[6]]]);
+      return { success: true, item: rowToWardrobeItem_(row) };
+    }
+  }
+  return { success: false, error: 'アイテムが見つかりませんでした。' };
+}
+
 function handleDeleteWardrobeItem(body) {
   const userId = getUserIdFromToken_(body.token);
   if (!userId) {
@@ -715,7 +810,7 @@ function callGeminiForWardrobePhoto_(imageBase64, mimeType) {
     '{ "items": [ { "category": "トップス", "name": "アイテム名", "color": "白", "brand": "", "memo": "特徴" } ] }'
   ].join('\n');
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + apiKey;
+  const url = geminiEndpoint_(getGeminiVisionModel_()) + '?key=' + apiKey;
   const payload = {
     contents: [{
       role: 'user',
@@ -1061,7 +1156,7 @@ function callGeminiForProposal_(options) {
   }
 
   const prompt = buildStylistPrompt_(options);
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + apiKey;
+  const url = geminiEndpoint_(getGeminiTextModel_()) + '?key=' + apiKey;
 
   const payload = {
     contents: [
@@ -1124,7 +1219,7 @@ function callLightXOutfit_(imageUrl, textPrompt) {
     throw new Error('LIGHTX_API_KEYが設定されていません。');
   }
 
-  const submitResponse = UrlFetchApp.fetch(LIGHTX_OUTFIT_URL, {
+  const submitResponse = UrlFetchApp.fetch(lightxEndpoint_('outfit'), {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-api-key': apiKey },
@@ -1160,7 +1255,7 @@ function callLightXOutfit_(imageUrl, textPrompt) {
   for (let i = 0; i < 10; i++) {
     Utilities.sleep(3000);
 
-    const statusResponse = UrlFetchApp.fetch(LIGHTX_STATUS_URL, {
+    const statusResponse = UrlFetchApp.fetch(lightxEndpoint_('order-status'), {
       method: 'post',
       contentType: 'application/json',
       headers: { 'x-api-key': apiKey },
@@ -1190,10 +1285,6 @@ function callLightXOutfit_(imageUrl, textPrompt) {
 // 試着イメージ生成（Gemini 画像モデル）
 // ============================================================
 
-function getGeminiImageModel_() {
-  const v = PropertiesService.getScriptProperties().getProperty('GEMINI_IMAGE_MODEL');
-  return (v && String(v).trim()) || GEMINI_IMAGE_MODEL_DEFAULT;
-}
 
 // lh3.googleusercontent.com/d/{fileId}=s1024 形式のURLからファイルIDを取り出す
 function extractDriveFileId_(url) {
@@ -1298,7 +1389,7 @@ function callGeminiTryOn_(frontPhotoUrl, proposal, profile, wardrobeMap) {
     parts.push({ inline_data: { mime_type: img.mimeType, data: img.data } });
   });
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + getGeminiImageModel_() + ':generateContent';
+  const url = geminiEndpoint_(getGeminiImageModel_());
   const response = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
@@ -1339,6 +1430,28 @@ function callGeminiTryOn_(frontPhotoUrl, proposal, profile, wardrobeMap) {
     }
   }
   throw new Error('試着イメージが返されませんでした（' + (cand.finishReason || 'NO_IMAGE') + '）。もう一度お試しください。');
+}
+
+// ============================================================
+// バージョン情報
+// ============================================================
+
+function handleGetVersion() {
+  const props = PropertiesService.getScriptProperties();
+  return {
+    success: true,
+    apiVersion: API_VERSION,
+    releaseDate: API_RELEASE_DATE,
+    geminiImageModel: getGeminiImageModel_(),
+    models: {
+      text: getGeminiTextModel_(),
+      vision: getGeminiVisionModel_(),
+      image: getGeminiImageModel_(),
+      geminiApiVersion: getSetting_('GEMINI_API_VERSION'),
+      lightxApiVersion: getSetting_('LIGHTX_API_VERSION')
+    },
+    lightxEnabled: !!props.getProperty('LIGHTX_API_KEY')
+  };
 }
 
 // ============================================================
