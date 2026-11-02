@@ -171,6 +171,44 @@
   .divider-text::before, .divider-text::after{ content:''; flex:1; border-top:1px solid var(--line); }
   .img-modal{ position:fixed; inset:0; background:rgba(43,43,38,.8); display:flex; align-items:center; justify-content:center; z-index:50; padding:1.5rem; }
   .img-modal img{ max-height:85vh; max-width:100%; border-radius:.5rem; }
+  /* --- 共有（指定会員への公開） --- */
+  .sub-tabs{ display:flex; gap:.5rem; margin-bottom:1.25rem; }
+  .sub-tab{ flex:1; padding:.55rem .5rem; font-size:.8rem; border:1px solid var(--line); border-radius:.5rem; background:var(--paper-soft); color:#8A8271; }
+  .sub-tab.active{ background:var(--olive-deep); border-color:var(--olive-deep); color:var(--paper-soft); }
+  .share-section{ margin-bottom:2rem; }
+  .share-h{ font-family:'Shippori Mincho', serif; font-size:1rem; margin-bottom:.35rem; }
+  .share-note{ font-size:.72rem; color:#8A8271; margin-bottom:.75rem; line-height:1.6; }
+  .share-add{ display:grid; grid-template-columns:1.6fr 1fr auto; gap:.5rem; }
+  @media (max-width:520px){ .share-add{ grid-template-columns:1fr 1fr; } .share-add .add-email{ grid-column:1 / -1; } }
+  .share-add input{ padding:.5rem .65rem; font-size:.85rem; width:100%; }
+  .share-row{ display:flex; align-items:center; gap:.75rem; border:1px solid var(--line); background:var(--paper-soft); border-radius:.5rem; padding:.65rem .8rem; margin-bottom:.45rem; }
+  .share-row.off{ opacity:.6; }
+  .share-row .grow{ flex:1; min-width:0; }
+  .share-row .ttl{ font-size:.9rem; }
+  .share-row .sub{ font-size:.7rem; color:#8A8271; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .share-row .links{ display:flex; gap:.6rem; margin-top:.2rem; }
+  .share-row .links button{ font-size:.68rem; text-decoration:underline; color:#8A8271; }
+  .share-thumb{ width:40px; height:52px; border-radius:.3rem; object-fit:cover; flex-shrink:0; background:var(--paper); border:1px solid var(--line); }
+  .share-thumb.empty{ display:flex; align-items:center; justify-content:center; font-size:9px; color:#B8AF9C; }
+  .switch{ display:inline-flex; align-items:center; gap:.4rem; flex-shrink:0; font-size:.7rem; color:#8A8271; background:none; }
+  .switch .track{ width:38px; height:22px; border-radius:999px; background:#CFC6B2; position:relative; transition:background .15s ease; }
+  .switch .track::after{ content:''; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s ease; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .switch.on{ color:var(--olive-deep); }
+  .switch.on .track{ background:var(--olive-deep); }
+  .switch.on .track::after{ left:19px; }
+  .switch:disabled{ opacity:.5; cursor:wait; }
+  .share-badge{ display:inline-block; font-size:10px; padding:1px 7px; border-radius:999px; border:1px solid var(--line); color:#8A8271; background:var(--paper); }
+  .share-badge.on{ border-color:var(--olive); color:var(--olive-deep); background:#E5E7D6; }
+  .bulk-row{ display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.6rem; }
+  .bulk-row button{ font-size:.72rem; padding:.3rem .7rem; border-radius:.35rem; }
+  .msg-err{ font-size:.75rem; color:var(--clay); margin-top:.4rem; }
+  .msg-ok{ font-size:.75rem; color:var(--olive-deep); margin-top:.4rem; }
+  .owner-block{ margin-bottom:1.75rem; }
+  .owner-name{ font-family:'Shippori Mincho', serif; font-size:1rem; margin-bottom:.5rem; display:flex; align-items:baseline; gap:.5rem; }
+  .owner-name small{ font-size:.7rem; color:#8A8271; font-family:'Zen Kaku Gothic New', sans-serif; }
+  .share-row.clickable{ cursor:pointer; }
+  .share-row.clickable:hover{ border-color:var(--olive); }
+  .hist-share-btn{ flex-shrink:0; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -302,6 +340,7 @@
       <button class="tab-btn pb-3 text-sm" data-maintab="wardrobe" id="tabWardrobe">クローゼット</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="history" id="tabHistory">履歴</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="photos" id="tabPhotos">マイフォト</button>
+      <button class="tab-btn pb-3 text-sm" data-maintab="share" id="tabShare">共有</button>
       <button class="tab-btn pb-3 text-sm" data-maintab="profile" id="tabProfile">プロフィール</button>
     </div>
 
@@ -485,6 +524,58 @@
     <div id="photosView" class="hidden">
       <p class="text-sm mb-5" style="color:#5A543F">前後左右の写真を登録すると、提案されたコーディネートを実際に着たイメージを作成できます。正面写真は必須です。</p>
       <div class="grid grid-cols-2 gap-4" id="photoSlots"></div>
+    </div>
+
+    <!-- --- 共有（指定した会員にだけ公開） --- -->
+    <div id="shareView" class="hidden">
+      <div class="sub-tabs">
+        <button type="button" class="sub-tab active" id="shareSubOwn">わたしのコーデを見せる</button>
+        <button type="button" class="sub-tab" id="shareSubWithMe">見せてもらう</button>
+      </div>
+
+      <div id="shareOwnPane">
+        <div class="share-section">
+          <p class="share-h">公開相手（家族・友人）</p>
+          <p class="share-note">FUDAN,に登録している方のメールアドレスを追加すると、その方だけが「公開」にしたコーデを見られます。スイッチを切ると、その方への公開を一時的に止められます。</p>
+          <div class="share-add">
+            <input type="email" id="shareAddEmail" class="add-email" placeholder="相手のメールアドレス">
+            <input type="text" id="shareAddLabel" placeholder="呼び名（例：母・妻）" maxlength="20">
+            <button type="button" id="shareAddBtn" class="btn-primary rounded px-4 py-2 text-sm">追加</button>
+          </div>
+          <p id="shareAddMsg" class="msg-err hidden"></p>
+          <div id="shareViewerList" style="margin-top:.9rem"></div>
+        </div>
+
+        <div class="share-section">
+          <p class="share-h">公開するコーデ</p>
+          <p class="share-note">スイッチが入っているコーデだけが、公開中の相手に表示されます。新しく作ったコーデは「非公開」から始まります。</p>
+          <div class="bulk-row">
+            <button type="button" id="shareAllOnBtn" class="btn-outline">すべて公開</button>
+            <button type="button" id="shareAllOffBtn" class="btn-outline">すべて非公開</button>
+          </div>
+          <p id="shareCoordSummary" class="text-xs mb-2" style="color:var(--olive-deep)"></p>
+          <div id="shareCoordList"></div>
+        </div>
+
+        <div class="share-section">
+          <p class="share-h">相手に見せる表示</p>
+          <div class="mb-3">
+            <label class="text-xs" style="color:#8A8271">表示名（相手の画面に出る名前）</label>
+            <input type="text" id="shareDisplayName" maxlength="30" placeholder="例：けん" class="w-full px-3 py-2 mt-1 text-sm">
+          </div>
+          <label class="flex items-center gap-2 text-sm mb-3">
+            <input type="checkbox" id="shareShowTryOn"> 試着イメージ（自分の写真から作った画像）も見せる
+          </label>
+          <button type="button" id="shareSettingsSaveBtn" class="btn-primary px-4 py-2 text-sm rounded">表示設定を保存</button>
+          <p id="shareSettingsMsg" class="msg-ok hidden"></p>
+        </div>
+      </div>
+
+      <div id="shareWithMePane" class="hidden">
+        <p class="share-note">あなたを公開相手に追加した方の、公開中のコーデです。</p>
+        <div id="sharedOwnerList"></div>
+        <div id="sharedDetail"></div>
+      </div>
     </div>
 
     <!-- --- プロフィール編集 --- -->
@@ -741,6 +832,7 @@ function init() {
   bindModeCards();
   renderBudgetPresets();
   initWardrobeForm();
+  bindShareUi();
 
   if (state.token && state.user) {
     showMainApp();
@@ -1009,6 +1101,10 @@ function bindMainTabs() {
     switchMainTab('profile');
     loadProfileForEdit();
   });
+  document.getElementById('tabShare').addEventListener('click', () => {
+    switchMainTab('share');
+    openSharePane(shareState.pane);
+  });
 }
 
 function switchMainTab(tab) {
@@ -1017,6 +1113,8 @@ function switchMainTab(tab) {
   document.getElementById('tabWardrobe').classList.toggle('active', tab === 'wardrobe');
   document.getElementById('tabPhotos').classList.toggle('active', tab === 'photos');
   document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
+  document.getElementById('tabShare').classList.toggle('active', tab === 'share');
+  document.getElementById('shareView').classList.toggle('hidden', tab !== 'share');
   document.getElementById('consultView').classList.toggle('hidden', tab !== 'consult');
   document.getElementById('historyView').classList.toggle('hidden', tab !== 'history');
   document.getElementById('wardrobeView').classList.toggle('hidden', tab !== 'wardrobe');
@@ -2080,6 +2178,11 @@ async function loadHistory() {
     `;
 
     const openBtn = row.querySelector('button');
+    row.appendChild(buildShareSwitch(!!h.isShared, async (next) => {
+      const ok = await setCoordsShared([h.historyId], next);
+      if (ok) h.isShared = next;
+      return ok;
+    }, true));
     openBtn.addEventListener('click', () => {
       listEl.querySelectorAll('.card-line').forEach((el) => el.classList.remove('history-row-active'));
       row.classList.add('history-row-active');
@@ -2153,6 +2256,314 @@ async function loadHistoryDetail(historyId) {
   renderProposal(bodyEl, res.detail.proposal);
   attachTryOnSection(bodyEl, res.detail.historyId, res.detail.tryOnImageUrl || '');
   detailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+// 共有（指定した登録会員にだけコーデを公開）
+// ============================================================
+const shareState = { pane: 'own', viewers: [], coords: [], settings: { displayName: '', showTryOn: true } };
+
+function bindShareUi() {
+  document.getElementById('shareSubOwn').addEventListener('click', () => openSharePane('own'));
+  document.getElementById('shareSubWithMe').addEventListener('click', () => openSharePane('withme'));
+  document.getElementById('shareAddBtn').addEventListener('click', addShareViewer);
+  document.getElementById('shareAddEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') addShareViewer(); });
+  document.getElementById('shareAddLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter') addShareViewer(); });
+  document.getElementById('shareAllOnBtn').addEventListener('click', () => bulkShare(true));
+  document.getElementById('shareAllOffBtn').addEventListener('click', () => bulkShare(false));
+  document.getElementById('shareSettingsSaveBtn').addEventListener('click', saveShareSettings);
+}
+
+function openSharePane(pane) {
+  shareState.pane = pane;
+  document.getElementById('shareSubOwn').classList.toggle('active', pane === 'own');
+  document.getElementById('shareSubWithMe').classList.toggle('active', pane === 'withme');
+  document.getElementById('shareOwnPane').classList.toggle('hidden', pane !== 'own');
+  document.getElementById('shareWithMePane').classList.toggle('hidden', pane !== 'withme');
+  if (pane === 'own') loadShareOwn(); else loadSharedWithMe();
+}
+
+// スイッチ部品。onToggle(next) は true/false（成功）を返す async 関数
+function buildShareSwitch(isOn, onToggle, compact, labels) {
+  labels = labels || { on: '公開', off: '非公開' };
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'switch' + (compact ? ' hist-share-btn' : '');
+  const paint = (on) => {
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.innerHTML = `<span class="track"></span><span>${on ? labels.on : labels.off}</span>`;
+    btn.title = on ? labels.on + '（タップで切り替え）' : labels.off + '（タップで切り替え）';
+  };
+  paint(isOn);
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const next = !btn.classList.contains('on');
+    paint(next);
+    btn.disabled = true;
+    const ok = await onToggle(next);
+    btn.disabled = false;
+    if (!ok) paint(!next);
+  });
+  return btn;
+}
+
+async function setCoordsShared(historyIds, shared) {
+  try {
+    const res = await callApi('setHistoryShared', { token: state.token, historyIds: historyIds, shared: shared });
+    if (!res.success) { alert(res.error || '公開設定の変更に失敗しました。'); return false; }
+    shareState.coords.forEach((c) => { if (historyIds.indexOf(c.historyId) !== -1) c.isShared = shared; });
+    updateShareCoordSummary();
+    return true;
+  } catch (e) {
+    alert('通信に失敗しました。');
+    return false;
+  }
+}
+
+async function loadShareOwn() {
+  const vList = document.getElementById('shareViewerList');
+  const cList = document.getElementById('shareCoordList');
+  vList.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+  cList.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+
+  const [sRes, hRes] = await Promise.all([
+    callApi('getShareSettings', { token: state.token }),
+    callApi('getHistory', { token: state.token })
+  ]);
+
+  if (sRes.success) {
+    shareState.viewers = sRes.viewers || [];
+    shareState.settings = sRes.settings || { displayName: '', showTryOn: true };
+    document.getElementById('shareDisplayName').value = shareState.settings.displayName || '';
+    document.getElementById('shareShowTryOn').checked = shareState.settings.showTryOn !== false;
+    renderShareViewers();
+  } else {
+    vList.innerHTML = `<p class="msg-err">${escapeHtml(sRes.error || '公開相手の取得に失敗しました。')}</p>`;
+  }
+
+  if (hRes.success) {
+    shareState.coords = hRes.history || [];
+    renderShareCoords();
+  } else {
+    cList.innerHTML = `<p class="msg-err">${escapeHtml(hRes.error || 'コーデの取得に失敗しました。')}</p>`;
+  }
+}
+
+function renderShareViewers() {
+  const list = document.getElementById('shareViewerList');
+  list.innerHTML = '';
+  if (!shareState.viewers.length) {
+    list.innerHTML = '<p class="text-sm" style="color:#8A8271">まだ公開相手がいません。</p>';
+    return;
+  }
+  const activeCount = shareState.viewers.filter((v) => v.active).length;
+  list.insertAdjacentHTML('beforeend', `<p class="text-xs mb-2" style="color:var(--olive-deep)">${shareState.viewers.length}人登録 ・ うち ${activeCount}人に公開中</p>`);
+
+  shareState.viewers.forEach((v) => {
+    const row = document.createElement('div');
+    row.className = 'share-row' + (v.active ? '' : ' off');
+    row.innerHTML = `
+      <div class="grow">
+        <p class="ttl">${escapeHtml(v.label || '（呼び名なし）')}</p>
+        <p class="sub">${escapeHtml(v.viewerEmail)}</p>
+        <div class="links">
+          <button type="button" data-act="rename">呼び名を変更</button>
+          <button type="button" data-act="delete">削除</button>
+        </div>
+      </div>
+    `;
+    const sw = buildShareSwitch(v.active, async (next) => {
+      const res = await callApi('updateShareViewer', { token: state.token, shareId: v.shareId, active: next });
+      if (!res.success) { alert(res.error || '変更に失敗しました。'); return false; }
+      v.active = next;
+      renderShareViewers();
+      return true;
+    }, false, { on: '公開中', off: '停止中' });
+    row.appendChild(sw);
+
+    row.querySelector('[data-act="rename"]').addEventListener('click', async () => {
+      const name = prompt('呼び名を入力してください（20文字まで）', v.label || '');
+      if (name === null) return;
+      const res = await callApi('updateShareViewer', { token: state.token, shareId: v.shareId, label: name });
+      if (!res.success) { alert(res.error || '変更に失敗しました。'); return; }
+      v.label = res.viewer.label;
+      renderShareViewers();
+    });
+    row.querySelector('[data-act="delete"]').addEventListener('click', async () => {
+      if (!confirm(`${v.label || v.viewerEmail} さんを公開相手から削除しますか？\n（相手からはあなたのコーデが見えなくなります）`)) return;
+      const res = await callApi('deleteShareViewer', { token: state.token, shareId: v.shareId });
+      if (!res.success) { alert(res.error || '削除に失敗しました。'); return; }
+      shareState.viewers = shareState.viewers.filter((x) => x.shareId !== v.shareId);
+      renderShareViewers();
+    });
+    list.appendChild(row);
+  });
+}
+
+async function addShareViewer() {
+  const emailEl = document.getElementById('shareAddEmail');
+  const labelEl = document.getElementById('shareAddLabel');
+  const msg = document.getElementById('shareAddMsg');
+  const btn = document.getElementById('shareAddBtn');
+  const email = emailEl.value.trim();
+  msg.classList.add('hidden');
+  if (!email) { msg.textContent = 'メールアドレスを入力してください。'; msg.classList.remove('hidden'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '追加中…';
+  try {
+    const res = await callApi('addShareViewer', { token: state.token, email: email, label: labelEl.value.trim() });
+    if (!res.success) {
+      msg.textContent = res.error || '追加に失敗しました。';
+      msg.classList.remove('hidden');
+      return;
+    }
+    shareState.viewers.push(res.viewer);
+    emailEl.value = '';
+    labelEl.value = '';
+    renderShareViewers();
+  } catch (e) {
+    msg.textContent = '通信に失敗しました。';
+    msg.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '追加';
+  }
+}
+
+function updateShareCoordSummary() {
+  const el = document.getElementById('shareCoordSummary');
+  if (!el) return;
+  const total = shareState.coords.length;
+  const on = shareState.coords.filter((c) => c.isShared).length;
+  el.textContent = total ? `${total}件中 ${on}件を公開中` : '';
+}
+
+function renderShareCoords() {
+  const list = document.getElementById('shareCoordList');
+  list.innerHTML = '';
+  updateShareCoordSummary();
+  if (!shareState.coords.length) {
+    list.innerHTML = '<p class="text-sm" style="color:#8A8271">まだコーデがありません。「診断する」でコーデを作ると、ここで公開を選べます。</p>';
+    return;
+  }
+  shareState.coords.forEach((c) => {
+    const row = document.createElement('div');
+    row.className = 'share-row';
+    const thumb = c.tryOnImageUrl
+      ? `<img src="${c.tryOnImageUrl}" class="share-thumb">`
+      : `<div class="share-thumb empty">画像なし</div>`;
+    row.innerHTML = `
+      ${thumb}
+      <div class="grow">
+        <p class="sub">${escapeHtml(new Date(c.createdAt).toLocaleDateString('ja-JP'))} ・ ${escapeHtml(c.scene || '')}</p>
+        <p class="ttl" style="font-size:.82rem">${escapeHtml(c.summary || c.mood || '')}</p>
+      </div>
+    `;
+    row.appendChild(buildShareSwitch(!!c.isShared, (next) => setCoordsShared([c.historyId], next)));
+    list.appendChild(row);
+  });
+}
+
+async function bulkShare(shared) {
+  const targets = shareState.coords.filter((c) => !!c.isShared !== shared).map((c) => c.historyId);
+  if (!targets.length) return;
+  const label = shared ? '公開' : '非公開';
+  if (!confirm(`${targets.length}件のコーデをすべて${label}にしますか？`)) return;
+  const ok = await setCoordsShared(targets, shared);
+  if (ok) renderShareCoords();
+}
+
+async function saveShareSettings() {
+  const btn = document.getElementById('shareSettingsSaveBtn');
+  const msg = document.getElementById('shareSettingsMsg');
+  msg.classList.add('hidden');
+  btn.disabled = true;
+  try {
+    const res = await callApi('updateShareSettings', {
+      token: state.token,
+      displayName: document.getElementById('shareDisplayName').value.trim(),
+      showTryOn: document.getElementById('shareShowTryOn').checked
+    });
+    msg.className = res.success ? 'msg-ok' : 'msg-err';
+    msg.textContent = res.success ? '保存しました。' : (res.error || '保存に失敗しました。');
+    if (res.success) shareState.settings = res.settings;
+  } catch (e) {
+    msg.className = 'msg-err';
+    msg.textContent = '通信に失敗しました。';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadSharedWithMe() {
+  const list = document.getElementById('sharedOwnerList');
+  document.getElementById('sharedDetail').innerHTML = '';
+  list.innerHTML = '<p class="text-sm" style="color:#8A8271">読み込み中…</p>';
+
+  const res = await callApi('getSharedWithMe', { token: state.token });
+  if (!res.success) {
+    list.innerHTML = `<p class="msg-err">${escapeHtml(res.error || '取得に失敗しました。')}</p>`;
+    return;
+  }
+  if (!res.owners.length) {
+    list.innerHTML = '<p class="text-sm" style="color:#8A8271">まだ、あなたにコーデを公開している方はいません。<br>家族やお友だちに、あなたの登録メールアドレスを公開相手に追加してもらってください。</p>';
+    return;
+  }
+
+  list.innerHTML = '';
+  res.owners.forEach((o) => {
+    const block = document.createElement('div');
+    block.className = 'owner-block';
+    block.innerHTML = `<p class="owner-name">${escapeHtml(o.displayName)} さん<small>${o.coords.length}件公開中</small></p>`;
+    if (!o.coords.length) {
+      block.insertAdjacentHTML('beforeend', '<p class="text-xs" style="color:#8A8271">公開中のコーデはまだありません。</p>');
+    }
+    o.coords.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'share-row clickable';
+      const thumb = c.tryOnImageUrl
+        ? `<img src="${c.tryOnImageUrl}" class="share-thumb">`
+        : `<div class="share-thumb empty">画像なし</div>`;
+      const price = (typeof c.totalPrice === 'number' && !isNaN(c.totalPrice))
+        ? (c.mode === 'owned' ? '手持ちだけ' : '合計 ' + formatYen(c.totalPrice)) : '';
+      row.innerHTML = `
+        ${thumb}
+        <div class="grow">
+          <p class="sub">${escapeHtml(new Date(c.createdAt).toLocaleDateString('ja-JP'))} ・ ${escapeHtml(c.scene || '')}</p>
+          <p class="ttl" style="font-size:.82rem">${escapeHtml(c.summary || c.mood || '')}</p>
+          ${price ? `<p class="text-xs price-tag" style="color:var(--olive-deep)">${escapeHtml(price)}</p>` : ''}
+        </div>
+      `;
+      row.addEventListener('click', () => {
+        list.querySelectorAll('.share-row').forEach((el) => el.classList.remove('history-row-active'));
+        row.classList.add('history-row-active');
+        loadSharedDetail(c.historyId, o.displayName);
+      });
+      block.appendChild(row);
+    });
+    list.appendChild(block);
+  });
+}
+
+async function loadSharedDetail(historyId, ownerName) {
+  const el = document.getElementById('sharedDetail');
+  el.innerHTML = '<hr class="my-6" style="border-color:var(--line)"><p class="text-sm" style="color:#8A8271"><span class="spinner inline-block align-middle mr-1"></span>読み込み中…</p>';
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const res = await callApi('getSharedHistoryDetail', { token: state.token, historyId: historyId });
+  if (!res.success) {
+    el.innerHTML = `<hr class="my-6" style="border-color:var(--line)"><p class="msg-err">${escapeHtml(res.error || '取得に失敗しました。')}</p>`;
+    return;
+  }
+  const d = res.detail;
+  el.innerHTML = `<hr class="my-6" style="border-color:var(--line)">
+    <p class="text-xs mb-3" style="color:#8A8271">${escapeHtml(ownerName)} さんのコーデ ・ ${escapeHtml(new Date(d.createdAt).toLocaleDateString('ja-JP'))} ・ ${escapeHtml(d.scene || '')}</p>
+    ${d.tryOnImageUrl ? `<img src="${d.tryOnImageUrl}" class="w-full rounded-lg card-line mb-6" style="max-width:360px">` : ''}
+    <div id="sharedDetailBody"></div>`;
+  renderProposal(document.getElementById('sharedDetailBody'), d.proposal);
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================================

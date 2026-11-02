@@ -25,6 +25,12 @@
  *   シート「History」 : HistoryID / UserID / CreatedAt / Brands / Scene / Mood / Temperature / OwnedItems / ResultJSON / TryOnImageUrl
  *                       / TopColors / BottomColors / TopStyles / BottomStyles / Mode / BudgetMin / BudgetMax / TotalPrice
  *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt / PhotoUrl （手持ちの服・編集可）
+ *   ※History の19列目「IsShared」（共有公開フラグ）は自動で追加されます。
+ *   シート「Shares」       : ShareID / OwnerID / ViewerID / ViewerEmail / Label / Active / CreatedAt / UpdatedAt
+ *                            （コーデを見せる相手。OwnerID の公開コーデを ViewerID が閲覧可。Active=FALSE で一時停止）
+ *   シート「ShareSettings」: UserID / DisplayName / ShowTryOn / UpdatedAt
+ *                            （公開相手に表示する名前・試着イメージも見せるか）
+ *   いずれも初回アクセス時に自動作成されます。
  *
  * ■Googleドライブ
  *   マイフォト保存先　: 「FudanStyle_UserPhotos」フォルダ（ユーザーごとにサブフォルダ）
@@ -33,8 +39,8 @@
  *   ※LightX APIが画像を取得できるよう、保存した画像は「リンクを知っている全員が閲覧可」で共有されます。
  */
 
-const API_VERSION = '2026.11.01';
-const API_RELEASE_DATE = '2026-11-01';
+const API_VERSION = '2026.11.03';
+const API_RELEASE_DATE = '2026-11-03';
 const SESSION_TTL_SEC = 21600; // 6時間（CacheServiceの上限）
 
 // ============================================================
@@ -162,6 +168,31 @@ function doPost(e) {
         break;
       case 'analyzeWardrobePhoto':
         result = handleAnalyzeWardrobePhoto(body);
+        break;
+      // --- 共有（指定会員への公開） ---
+      case 'getShareSettings':
+        result = handleGetShareSettings(body);
+        break;
+      case 'updateShareSettings':
+        result = handleUpdateShareSettings(body);
+        break;
+      case 'addShareViewer':
+        result = handleAddShareViewer(body);
+        break;
+      case 'updateShareViewer':
+        result = handleUpdateShareViewer(body);
+        break;
+      case 'deleteShareViewer':
+        result = handleDeleteShareViewer(body);
+        break;
+      case 'setHistoryShared':
+        result = handleSetHistoryShared(body);
+        break;
+      case 'getSharedWithMe':
+        result = handleGetSharedWithMe(body);
+        break;
+      case 'getSharedHistoryDetail':
+        result = handleGetSharedHistoryDetail(body);
         break;
       default:
         result = { success: false, error: '不明なアクションです: ' + action };
@@ -1545,6 +1576,337 @@ function handleGenerateTryOnImage(body) {
 }
 
 // ============================================================
+// 共有（指定した登録会員にのみコーデを公開）
+//   ・持ち主は「公開相手」（登録会員のメールアドレス）を複数登録できる
+//   ・公開相手ごとに 公開中 / 停止中 を切り替え可能
+//   ・コーデ（履歴）ごとに 公開 / 非公開 を切り替え可能
+//   ・閲覧できるのは「公開中の相手」×「公開にしたコーデ」のみ
+// ============================================================
+
+const HISTORY_SHARED_COL = 19; // History シートの IsShared 列（S列）
+const MAX_SHARE_VIEWERS = 30;
+
+function isTrue_(v) {
+  return v === true || String(v).toUpperCase() === 'TRUE';
+}
+
+function toIso_(v) {
+  return (v instanceof Date) ? v.toISOString() : String(v || '');
+}
+
+function getSharesSheet_() {
+  const ss = getSS_();
+  let sheet = ss.getSheetByName('Shares');
+  if (!sheet) {
+    sheet = ss.insertSheet('Shares');
+    sheet.appendRow(['ShareID', 'OwnerID', 'ViewerID', 'ViewerEmail', 'Label', 'Active', 'CreatedAt', 'UpdatedAt']);
+  }
+  return sheet;
+}
+
+function getShareSettingsSheet_() {
+  const ss = getSS_();
+  let sheet = ss.getSheetByName('ShareSettings');
+  if (!sheet) {
+    sheet = ss.insertSheet('ShareSettings');
+    sheet.appendRow(['UserID', 'DisplayName', 'ShowTryOn', 'UpdatedAt']);
+  }
+  return sheet;
+}
+
+// History シートに IsShared 列の見出しが無ければ追加
+function ensureHistorySharedColumn_(sheet) {
+  if (sheet.getMaxColumns() < HISTORY_SHARED_COL) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), HISTORY_SHARED_COL - sheet.getMaxColumns());
+  }
+  const head = sheet.getRange(1, HISTORY_SHARED_COL);
+  if (head.getValue() !== 'IsShared') head.setValue('IsShared');
+}
+
+// 持ち主の共有設定（表示名・試着イメージを見せるか）
+function getShareSettingsMap_() {
+  const data = getShareSettingsSheet_().getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    map[data[i][0]] = {
+      displayName: String(data[i][1] || ''),
+      showTryOn: data[i][2] === '' ? true : isTrue_(data[i][2])
+    };
+  }
+  return map;
+}
+
+function getOwnShareSettings_(userId) {
+  return getShareSettingsMap_()[userId] || { displayName: '', showTryOn: true };
+}
+
+function rowToShareViewer_(row) {
+  return {
+    shareId: row[0],
+    viewerEmail: row[3],
+    label: String(row[4] || ''),
+    active: isTrue_(row[5]),
+    createdAt: toIso_(row[6]),
+    updatedAt: toIso_(row[7])
+  };
+}
+
+function handleGetShareSettings(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const data = getSharesSheet_().getDataRange().getValues();
+  const viewers = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === userId) viewers.push(rowToShareViewer_(data[i]));
+  }
+  viewers.sort(function (a, b) { return new Date(a.createdAt) - new Date(b.createdAt); });
+
+  const settings = getOwnShareSettings_(userId);
+  return { success: true, settings: settings, viewers: viewers };
+}
+
+function handleUpdateShareSettings(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const displayName = String(body.displayName || '').trim().slice(0, 30);
+  const showTryOn = body.showTryOn !== false;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getShareSettingsSheet_();
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === userId) {
+        sheet.getRange(i + 1, 2, 1, 3).setValues([[displayName, showTryOn ? 'TRUE' : 'FALSE', now]]);
+        return { success: true, settings: { displayName: displayName, showTryOn: showTryOn } };
+      }
+    }
+    sheet.appendRow([userId, displayName, showTryOn ? 'TRUE' : 'FALSE', now]);
+    return { success: true, settings: { displayName: displayName, showTryOn: showTryOn } };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleAddShareViewer(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const email = String(body.email || '').trim().toLowerCase();
+  const label = String(body.label || '').trim().slice(0, 20);
+  if (!email) return { success: false, error: '公開相手のメールアドレスを入力してください。' };
+
+  const usersSheet = getUsersSheet_();
+  const viewer = findUserRowByEmail_(usersSheet, email);
+  if (!viewer) {
+    return { success: false, error: 'このメールアドレスはFUDAN,に登録されていません。先に相手の方に会員登録をしてもらってください。' };
+  }
+  const viewerId = viewer.row[0];
+  if (viewerId === userId) return { success: false, error: 'ご自身を公開相手にすることはできません。' };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getSharesSheet_();
+    const data = sheet.getDataRange().getValues();
+    let count = 0;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][1] !== userId) continue;
+      count++;
+      if (data[i][2] === viewerId) return { success: false, error: 'この方はすでに公開相手に登録されています。' };
+    }
+    if (count >= MAX_SHARE_VIEWERS) return { success: false, error: '公開相手は最大' + MAX_SHARE_VIEWERS + '人までです。' };
+
+    const now = new Date();
+    const row = [Utilities.getUuid(), userId, viewerId, email, label, 'TRUE', now, now];
+    sheet.appendRow(row);
+    return { success: true, viewer: rowToShareViewer_(row) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleUpdateShareViewer(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getSharesSheet_();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === body.shareId && data[i][1] === userId) {
+        const row = data[i];
+        if (typeof body.active === 'boolean') row[5] = body.active ? 'TRUE' : 'FALSE';
+        if (typeof body.label === 'string') row[4] = body.label.trim().slice(0, 20);
+        row[7] = new Date();
+        sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+        return { success: true, viewer: rowToShareViewer_(row) };
+      }
+    }
+    return { success: false, error: '公開相手が見つかりませんでした。' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleDeleteShareViewer(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getSharesSheet_();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === body.shareId && data[i][1] === userId) {
+        sheet.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { success: false, error: '公開相手が見つかりませんでした。' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// コーデ（履歴）の公開／非公開。historyIds（配列）でまとめて変更も可
+function handleSetHistoryShared(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  let ids = body.historyIds;
+  if (!Array.isArray(ids)) ids = body.historyId ? [body.historyId] : [];
+  if (!ids.length) return { success: false, error: '対象のコーデが指定されていません。' };
+  const shared = body.shared === true;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = getHistorySheet_();
+    ensureHistorySharedColumn_(sheet);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { success: false, error: '履歴がありません。' };
+
+    const keys = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    const flagRange = sheet.getRange(2, HISTORY_SHARED_COL, lastRow - 1, 1);
+    const flags = flagRange.getValues();
+    let changed = 0;
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i][1] === userId && ids.indexOf(keys[i][0]) !== -1) {
+        flags[i][0] = shared ? 'TRUE' : 'FALSE';
+        changed++;
+      }
+    }
+    if (!changed) return { success: false, error: '対象のコーデが見つかりませんでした。' };
+    flagRange.setValues(flags);
+    return { success: true, changed: changed, shared: shared };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 自分に公開されている人とコーデの一覧
+function handleGetSharedWithMe(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const shareData = getSharesSheet_().getDataRange().getValues();
+  const ownerIds = {};
+  for (let i = 1; i < shareData.length; i++) {
+    if (shareData[i][2] === userId && isTrue_(shareData[i][5])) ownerIds[shareData[i][1]] = true;
+  }
+  if (!Object.keys(ownerIds).length) return { success: true, owners: [] };
+
+  const settingsMap = getShareSettingsMap_();
+  const userData = getUsersSheet_().getDataRange().getValues();
+  const owners = {};
+  for (let i = 1; i < userData.length; i++) {
+    const id = userData[i][0];
+    if (!ownerIds[id]) continue;
+    const st = settingsMap[id] || { displayName: '', showTryOn: true };
+    owners[id] = {
+      ownerId: id,
+      displayName: st.displayName || String(userData[i][1] || '').split('@')[0],
+      showTryOn: st.showTryOn,
+      coords: []
+    };
+  }
+
+  const historyData = getHistorySheet_().getDataRange().getValues();
+  for (let i = 1; i < historyData.length; i++) {
+    const row = historyData[i];
+    const owner = owners[row[1]];
+    if (!owner || !isTrue_(row[HISTORY_SHARED_COL - 1])) continue;
+    let summary = '';
+    try { summary = JSON.parse(row[8]).coordination_summary || ''; } catch (e) {}
+    owner.coords.push({
+      historyId: row[0],
+      createdAt: toIso_(row[2]),
+      scene: row[4],
+      mood: row[5],
+      summary: summary,
+      mode: row[14] || 'new',
+      totalPrice: (row[17] === '' || row[17] === undefined) ? null : Number(row[17]),
+      tryOnImageUrl: owner.showTryOn ? (row[9] || '') : ''
+    });
+  }
+
+  const list = Object.keys(owners).map(function (k) {
+    const o = owners[k];
+    o.coords.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+    delete o.showTryOn;
+    return o;
+  });
+  list.sort(function (a, b) { return a.displayName.localeCompare(b.displayName, 'ja'); });
+  return { success: true, owners: list };
+}
+
+// 公開されたコーデの詳細（閲覧権限を確認してから返す）
+function handleGetSharedHistoryDetail(body) {
+  const userId = getUserIdFromToken_(body.token);
+  if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
+
+  const historyData = getHistorySheet_().getDataRange().getValues();
+  let row = null;
+  for (let i = 1; i < historyData.length; i++) {
+    if (historyData[i][0] === body.historyId) { row = historyData[i]; break; }
+  }
+  const notFound = { success: false, error: 'このコーデは表示できません（非公開になったか、公開が停止されました）。' };
+  if (!row || !isTrue_(row[HISTORY_SHARED_COL - 1])) return notFound;
+
+  const ownerId = row[1];
+  const shareData = getSharesSheet_().getDataRange().getValues();
+  let allowed = false;
+  for (let i = 1; i < shareData.length; i++) {
+    if (shareData[i][1] === ownerId && shareData[i][2] === userId && isTrue_(shareData[i][5])) { allowed = true; break; }
+  }
+  if (!allowed) return notFound;
+
+  let proposal = null;
+  try { proposal = JSON.parse(row[8]); } catch (e) {}
+  const st = getOwnShareSettings_(ownerId);
+  return {
+    success: true,
+    detail: {
+      historyId: row[0],
+      createdAt: toIso_(row[2]),
+      scene: row[4],
+      mood: row[5],
+      temperature: row[6],
+      proposal: proposal,
+      tryOnImageUrl: st.showTryOn ? (row[9] || '') : ''
+    }
+  };
+}
+
+// ============================================================
 // 履歴
 // ============================================================
 
@@ -1578,7 +1940,8 @@ function handleGetHistory(body) {
         summary: summary,
         tryOnImageUrl: row[9] || '',
         mode: row[14] || 'new',
-        totalPrice: (row[17] === '' || row[17] === undefined) ? null : Number(row[17])
+        totalPrice: (row[17] === '' || row[17] === undefined) ? null : Number(row[17]),
+        isShared: isTrue_(row[HISTORY_SHARED_COL - 1])
       });
     }
   }
@@ -1617,7 +1980,8 @@ function handleGetHistoryDetail(body) {
           temperature: row[6],
           ownedItems: row[7],
           proposal: proposal,
-          tryOnImageUrl: row[9] || ''
+          tryOnImageUrl: row[9] || '',
+          isShared: isTrue_(row[HISTORY_SHARED_COL - 1])
         }
       };
     }
