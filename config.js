@@ -8,11 +8,17 @@ window.FUDAN_CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzOgu1bApG9tSIylfsxJjEc1ykIx8irvlhYrCU87tT7xCOAfQz5oJ0ZlaUd4MYBPq4/exec',
 
   // フロントエンドのバージョン情報
-  APP_VERSION: '2026.11.03',
-  RELEASE_DATE: '2026-11-03',
+  APP_VERSION: '2026.11.04',
+  RELEASE_DATE: '2026-11-04',
 
   // 更新履歴（新しい順）
   CHANGELOG: [
+    { version: '2026.11.04', date: '2026-11-04', notes: [
+      '公開・非公開の初期設定をすべて「非公開」に（コーデ／公開相手／試着イメージ）',
+      'コーデを「LINEで送る」「その他で送る」「リンクをコピー」でその場で共有できるように',
+      '共有リンクを開くとログイン後にそのコーデを表示（見られるのは公開中の相手だけ）',
+      '未登録の家族・友人へ、LINEなどで登録の招待を送れるように'
+    ]},
     { version: '2026.11.03', date: '2026-11-03', notes: [
       '「共有」タブを追加：指定した登録会員（家族・友人など）にだけコーデを公開できるように',
       '公開相手を一覧で管理（追加・呼び名変更・公開中／停止中の切り替え・削除）',

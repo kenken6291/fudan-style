@@ -209,6 +209,13 @@
   .share-row.clickable{ cursor:pointer; }
   .share-row.clickable:hover{ border-color:var(--olive); }
   .hist-share-btn{ flex-shrink:0; }
+  .send-row{ display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.45rem; }
+  .send-btn{ font-size:.72rem; padding:.3rem .7rem; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink); }
+  .send-btn.line{ background:#06C755; border-color:#06C755; color:#fff; }
+  .send-btn.small{ padding:.2rem .55rem; font-size:.68rem; }
+  .invite-box{ margin-top:.9rem; padding:.7rem .85rem; border:1px dashed var(--line); border-radius:.5rem; background:var(--paper-soft); }
+  .toast{ position:fixed; left:50%; bottom:1.5rem; transform:translateX(-50%); background:var(--ink); color:var(--paper-soft); font-size:.8rem; padding:.55rem 1rem; border-radius:999px; z-index:60; opacity:0; transition:opacity .2s ease; pointer-events:none; }
+  .toast.show{ opacity:1; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -229,6 +236,10 @@
 
   <!-- ===== 認証画面 ===== -->
   <section id="authScreen" class="mt-12 max-w-sm mx-auto">
+    <div id="pendingCoordNotice" class="hidden invite-box mb-6" style="margin-top:0">
+      <p class="text-sm">👕 共有されたコーデを見るには、ログインしてください。</p>
+      <p class="text-xs mt-1" style="color:#8A8271">まだ登録していない方は「新規登録」から登録し、送ってくれた方に「公開相手」へ追加してもらってください。</p>
+    </div>
     <div class="flex justify-center gap-6 mb-8">
       <button class="tab-btn active pb-2 text-sm" data-authmode="login" id="tabLogin">ログイン</button>
       <button class="tab-btn pb-2 text-sm" data-authmode="register" id="tabRegister">新規登録</button>
@@ -542,13 +553,23 @@
             <input type="text" id="shareAddLabel" placeholder="呼び名（例：母・妻）" maxlength="20">
             <button type="button" id="shareAddBtn" class="btn-primary rounded px-4 py-2 text-sm">追加</button>
           </div>
+          <label class="flex items-center gap-2 text-xs mt-2" style="color:#5A543F">
+            <input type="checkbox" id="shareAddActive"> 追加と同時に公開する（チェックなしは「停止中」で追加）
+          </label>
           <p id="shareAddMsg" class="msg-err hidden"></p>
+          <div class="invite-box">
+            <p class="text-xs" style="color:#5A543F">相手がまだFUDAN,に登録していないときは、招待を送れます。</p>
+            <div class="send-row">
+              <button type="button" class="send-btn line" id="inviteLineBtn">LINEで招待</button>
+              <button type="button" class="send-btn" id="inviteOtherBtn">その他で送る</button>
+            </div>
+          </div>
           <div id="shareViewerList" style="margin-top:.9rem"></div>
         </div>
 
         <div class="share-section">
           <p class="share-h">公開するコーデ</p>
-          <p class="share-note">スイッチが入っているコーデだけが、公開中の相手に表示されます。新しく作ったコーデは「非公開」から始まります。</p>
+          <p class="share-note">スイッチが入っているコーデだけが、公開中の相手に表示されます。新しく作ったコーデは「非公開」から始まります。<br>「送る」からLINEなどでコーデのリンクを送れます（見られるのは公開中の相手だけです）。</p>
           <div class="bulk-row">
             <button type="button" id="shareAllOnBtn" class="btn-outline">すべて公開</button>
             <button type="button" id="shareAllOffBtn" class="btn-outline">すべて非公開</button>
@@ -564,7 +585,7 @@
             <input type="text" id="shareDisplayName" maxlength="30" placeholder="例：けん" class="w-full px-3 py-2 mt-1 text-sm">
           </div>
           <label class="flex items-center gap-2 text-sm mb-3">
-            <input type="checkbox" id="shareShowTryOn"> 試着イメージ（自分の写真から作った画像）も見せる
+            <input type="checkbox" id="shareShowTryOn"> 試着イメージ（自分の写真から作った画像）も見せる（初期設定：見せない）
           </label>
           <button type="button" id="shareSettingsSaveBtn" class="btn-primary px-4 py-2 text-sm rounded">表示設定を保存</button>
           <p id="shareSettingsMsg" class="msg-ok hidden"></p>
@@ -814,6 +835,7 @@ async function loadApiVersion() {
 // 初期化
 // ============================================================
 function init() {
+  captureSharedCoordFromUrl();
   initVersionInfo();
   renderBrandChips();
   renderChipGroup('usualStyleChips', USUAL_STYLE_OPTIONS, state.selectedUsualStyle, 'regUsualStyleOther');
@@ -842,6 +864,7 @@ function init() {
 }
 
 function showAuthScreen() {
+  document.getElementById('pendingCoordNotice').classList.toggle('hidden', !getPendingCoord());
   document.getElementById('authScreen').classList.remove('hidden');
   document.getElementById('forcePasswordScreen').classList.add('hidden');
   document.getElementById('mainApp').classList.add('hidden');
@@ -861,7 +884,9 @@ function showMainApp() {
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('headerUser').classList.remove('hidden');
   document.getElementById('headerEmail').textContent = state.user.email;
+  document.getElementById('pendingCoordNotice').classList.add('hidden');
   loadWardrobe();
+  openPendingSharedCoord();
 }
 
 // ============================================================
@@ -2253,6 +2278,13 @@ async function loadHistoryDetail(historyId) {
 
   detailEl.innerHTML = '<hr class="my-6" style="border-color:var(--line)"><div id="historyDetailBody"></div>';
   const bodyEl = document.getElementById('historyDetailBody');
+  const sendWrap = document.createElement('div');
+  sendWrap.className = 'invite-box mb-6';
+  sendWrap.style.marginTop = '0';
+  sendWrap.innerHTML = '<p class="text-xs" style="color:#5A543F">このコーデを家族・友人に送る（見られるのは公開中の相手だけ）</p>';
+  const coordRef = { historyId: res.detail.historyId, isShared: !!res.detail.isShared, summary: (res.detail.proposal || {}).coordination_summary || '', scene: res.detail.scene };
+  sendWrap.appendChild(buildSendButtons(coordRef, () => showToast('このコーデを公開にしました')));
+  detailEl.insertBefore(sendWrap, bodyEl);
   renderProposal(bodyEl, res.detail.proposal);
   attachTryOnSection(bodyEl, res.detail.historyId, res.detail.tryOnImageUrl || '');
   detailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2261,7 +2293,7 @@ async function loadHistoryDetail(historyId) {
 // ============================================================
 // 共有（指定した登録会員にだけコーデを公開）
 // ============================================================
-const shareState = { pane: 'own', viewers: [], coords: [], settings: { displayName: '', showTryOn: true } };
+const shareState = { pane: 'own', viewers: [], coords: [], settings: { displayName: '', showTryOn: false } };
 
 function bindShareUi() {
   document.getElementById('shareSubOwn').addEventListener('click', () => openSharePane('own'));
@@ -2272,6 +2304,8 @@ function bindShareUi() {
   document.getElementById('shareAllOnBtn').addEventListener('click', () => bulkShare(true));
   document.getElementById('shareAllOffBtn').addEventListener('click', () => bulkShare(false));
   document.getElementById('shareSettingsSaveBtn').addEventListener('click', saveShareSettings);
+  document.getElementById('inviteLineBtn').addEventListener('click', () => sendInvite('line'));
+  document.getElementById('inviteOtherBtn').addEventListener('click', () => sendInvite('other'));
 }
 
 function openSharePane(pane) {
@@ -2334,9 +2368,10 @@ async function loadShareOwn() {
 
   if (sRes.success) {
     shareState.viewers = sRes.viewers || [];
-    shareState.settings = sRes.settings || { displayName: '', showTryOn: true };
+    shareState.viewersLoaded = true;
+    shareState.settings = sRes.settings || { displayName: '', showTryOn: false };
     document.getElementById('shareDisplayName').value = shareState.settings.displayName || '';
-    document.getElementById('shareShowTryOn').checked = shareState.settings.showTryOn !== false;
+    document.getElementById('shareShowTryOn').checked = shareState.settings.showTryOn === true;
     renderShareViewers();
   } else {
     vList.innerHTML = `<p class="msg-err">${escapeHtml(sRes.error || '公開相手の取得に失敗しました。')}</p>`;
@@ -2413,7 +2448,8 @@ async function addShareViewer() {
   btn.disabled = true;
   btn.textContent = '追加中…';
   try {
-    const res = await callApi('addShareViewer', { token: state.token, email: email, label: labelEl.value.trim() });
+    const activeEl = document.getElementById('shareAddActive');
+    const res = await callApi('addShareViewer', { token: state.token, email: email, label: labelEl.value.trim(), active: activeEl.checked });
     if (!res.success) {
       msg.textContent = res.error || '追加に失敗しました。';
       msg.classList.remove('hidden');
@@ -2422,7 +2458,9 @@ async function addShareViewer() {
     shareState.viewers.push(res.viewer);
     emailEl.value = '';
     labelEl.value = '';
+    activeEl.checked = false;
     renderShareViewers();
+    if (!res.viewer.active) showToast('「停止中」で追加しました。スイッチで公開できます');
   } catch (e) {
     msg.textContent = '通信に失敗しました。';
     msg.classList.remove('hidden');
@@ -2461,6 +2499,8 @@ function renderShareCoords() {
         <p class="ttl" style="font-size:.82rem">${escapeHtml(c.summary || c.mood || '')}</p>
       </div>
     `;
+    const grow = row.querySelector('.grow');
+    grow.appendChild(buildSendButtons(c, () => renderShareCoords()));
     row.appendChild(buildShareSwitch(!!c.isShared, (next) => setCoordsShared([c.historyId], next)));
     list.appendChild(row);
   });
@@ -2558,12 +2598,179 @@ async function loadSharedDetail(historyId, ownerName) {
     return;
   }
   const d = res.detail;
+  ownerName = ownerName || d.ownerName || '';
+  const whose = d.isOwner ? 'あなたのコーデ（共有リンクのプレビュー）' : `${escapeHtml(ownerName)} さんのコーデ`;
   el.innerHTML = `<hr class="my-6" style="border-color:var(--line)">
-    <p class="text-xs mb-3" style="color:#8A8271">${escapeHtml(ownerName)} さんのコーデ ・ ${escapeHtml(new Date(d.createdAt).toLocaleDateString('ja-JP'))} ・ ${escapeHtml(d.scene || '')}</p>
+    ${d.isOwner && !d.isShared ? '<p class="msg-err mb-2">このコーデは現在「非公開」です。相手には表示されません。</p>' : ''}
+    <p class="text-xs mb-3" style="color:#8A8271">${whose} ・ ${escapeHtml(new Date(d.createdAt).toLocaleDateString('ja-JP'))} ・ ${escapeHtml(d.scene || '')}</p>
     ${d.tryOnImageUrl ? `<img src="${d.tryOnImageUrl}" class="w-full rounded-lg card-line mb-6" style="max-width:360px">` : ''}
     <div id="sharedDetailBody"></div>`;
   renderProposal(document.getElementById('sharedDetailBody'), d.proposal);
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+// LINE などで送る（共有リンク）
+//   リンク：<アプリURL>?coord=<HistoryID>
+//   開いた人はログイン後、閲覧権限（公開中の相手＋公開コーデ）があれば表示
+// ============================================================
+const PENDING_COORD_KEY = 'fudan_pending_coord';
+
+function appBaseUrl() {
+  return location.origin + location.pathname;
+}
+
+function captureSharedCoordFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('coord');
+  if (id) {
+    sessionStorage.setItem(PENDING_COORD_KEY, id);
+    params.delete('coord');
+    const q = params.toString();
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+  }
+}
+
+function getPendingCoord() {
+  return sessionStorage.getItem(PENDING_COORD_KEY) || '';
+}
+
+function openPendingSharedCoord() {
+  const id = getPendingCoord();
+  if (!id) return;
+  sessionStorage.removeItem(PENDING_COORD_KEY);
+  switchMainTab('share');
+  shareState.pane = 'withme';
+  document.getElementById('shareSubOwn').classList.remove('active');
+  document.getElementById('shareSubWithMe').classList.add('active');
+  document.getElementById('shareOwnPane').classList.add('hidden');
+  document.getElementById('shareWithMePane').classList.remove('hidden');
+  loadSharedWithMe().then(() => loadSharedDetail(id, ''));
+}
+
+function showToast(text) {
+  let t = document.getElementById('fudanToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'fudanToast';
+    t.className = 'toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+    return ok;
+  }
+}
+
+function openLine(text) {
+  // LINEアプリ（スマホ）／LINEのWeb共有画面（PC）で送信先を選べます
+  const url = 'https://line.me/R/share?text=' + encodeURIComponent(text);
+  const w = window.open(url, '_blank');
+  if (!w) location.href = url; // ポップアップがブロックされた場合はその場で開く
+}
+
+async function shareBySheet(title, text, url) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: title, text: text, url: url });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+  }
+  const ok = await copyText(text + '\n' + url);
+  showToast(ok ? 'リンクをコピーしました。LINEやメールに貼り付けてください' : 'コピーできませんでした');
+}
+
+function coordShareText(c) {
+  const name = (shareState.settings && shareState.settings.displayName) || '';
+  const head = name ? `${name}のコーデを見てね👕` : 'コーデを見てね👕';
+  const summary = c.summary ? `「${String(c.summary).slice(0, 40)}${String(c.summary).length > 40 ? '…' : ''}」` : '';
+  return [head, summary, '（FUDAN,にログインすると見られます）'].filter(Boolean).join('\n');
+}
+
+// 送る前の確認：非公開なら公開に、公開中の相手がいなければ注意
+async function prepareCoordForSending(c) {
+  if (!c.isShared) {
+    if (!confirm('このコーデは「非公開」です。公開にして送りますか？\n（公開中の相手だけが見られます）')) return false;
+    const ok = await setCoordsShared([c.historyId], true);
+    if (!ok) return false;
+    c.isShared = true;
+  }
+  if (!shareState.viewersLoaded) {
+    try {
+      const r = await callApi('getShareSettings', { token: state.token });
+      if (r.success) {
+        shareState.viewers = r.viewers || [];
+        shareState.settings = r.settings || shareState.settings;
+        shareState.viewersLoaded = true;
+      }
+    } catch (e) {}
+  }
+  const active = (shareState.viewers || []).filter((v) => v.active).length;
+  if (!active) {
+    if (!confirm('「公開中」の公開相手がいないため、リンクを開いても誰も見られません。\n「共有」タブで相手を追加・公開中にしてください。\n\nこのままリンクを送りますか？')) return false;
+  }
+  return true;
+}
+
+function buildSendButtons(c, afterSend) {
+  const wrap = document.createElement('div');
+  wrap.className = 'send-row';
+  const url = appBaseUrl() + '?coord=' + encodeURIComponent(c.historyId);
+
+  const mk = (label, cls, handler) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'send-btn small ' + cls;
+    b.textContent = label;
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const wasShared = c.isShared;
+      if (!(await prepareCoordForSending(c))) return;
+      await handler();
+      if (!wasShared && typeof afterSend === 'function') afterSend();
+    });
+    return b;
+  };
+
+  wrap.appendChild(mk('LINEで送る', 'line', () => openLine(coordShareText(c) + '\n' + url)));
+  wrap.appendChild(mk('その他で送る', '', () => shareBySheet('FUDAN, コーデ', coordShareText(c), url)));
+  wrap.appendChild(mk('リンクをコピー', '', async () => {
+    const ok = await copyText(url);
+    showToast(ok ? 'リンクをコピーしました' : 'コピーできませんでした');
+  }));
+  return wrap;
+}
+
+function sendInvite(kind) {
+  const myEmail = (state.user && state.user.email) || '';
+  const text = [
+    'FUDAN,（AIがいつもの服でコーデを提案してくれるアプリ）に登録してね。',
+    '登録したら、登録したメールアドレスを教えてください。わたしのコーデを見られるようにします。',
+    myEmail ? '（わたしの登録：' + myEmail + '）' : ''
+  ].filter(Boolean).join('\n');
+  const url = appBaseUrl();
+  if (kind === 'line') openLine(text + '\n' + url);
+  else shareBySheet('FUDAN, への招待', text, url);
 }
 
 // ============================================================

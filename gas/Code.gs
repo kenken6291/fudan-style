@@ -27,9 +27,11 @@
  *   シート「Wardrobe」: ItemID / UserID / Category / Name / Color / Brand / Memo / CreatedAt / PhotoUrl （手持ちの服・編集可）
  *   ※History の19列目「IsShared」（共有公開フラグ）は自動で追加されます。
  *   シート「Shares」       : ShareID / OwnerID / ViewerID / ViewerEmail / Label / Active / CreatedAt / UpdatedAt
- *                            （コーデを見せる相手。OwnerID の公開コーデを ViewerID が閲覧可。Active=FALSE で一時停止）
+ *                            （コーデを見せる相手。OwnerID の公開コーデを ViewerID が閲覧可。Active=FALSE で停止。追加時の既定は停止中）
+ *   ※公開・非公開はすべて既定で非公開（コーデ／公開相手／試着イメージ）。
+ *   ※共有リンク：https://kenken6291.github.io/fudan-style/?coord=<HistoryID>（開くにはログインと閲覧権限が必要）
  *   シート「ShareSettings」: UserID / DisplayName / ShowTryOn / UpdatedAt
- *                            （公開相手に表示する名前・試着イメージも見せるか）
+ *                            （公開相手に表示する名前・試着イメージも見せるか。既定は見せない）
  *   いずれも初回アクセス時に自動作成されます。
  *
  * ■Googleドライブ
@@ -39,8 +41,8 @@
  *   ※LightX APIが画像を取得できるよう、保存した画像は「リンクを知っている全員が閲覧可」で共有されます。
  */
 
-const API_VERSION = '2026.11.03';
-const API_RELEASE_DATE = '2026-11-03';
+const API_VERSION = '2026.11.04';
+const API_RELEASE_DATE = '2026-11-04';
 const SESSION_TTL_SEC = 21600; // 6時間（CacheServiceの上限）
 
 // ============================================================
@@ -1630,14 +1632,14 @@ function getShareSettingsMap_() {
   for (let i = 1; i < data.length; i++) {
     map[data[i][0]] = {
       displayName: String(data[i][1] || ''),
-      showTryOn: data[i][2] === '' ? true : isTrue_(data[i][2])
+      showTryOn: isTrue_(data[i][2]) // 未設定は「見せない」
     };
   }
   return map;
 }
 
 function getOwnShareSettings_(userId) {
-  return getShareSettingsMap_()[userId] || { displayName: '', showTryOn: true };
+  return getShareSettingsMap_()[userId] || { displayName: '', showTryOn: false };
 }
 
 function rowToShareViewer_(row) {
@@ -1671,7 +1673,7 @@ function handleUpdateShareSettings(body) {
   if (!userId) return { success: false, error: 'ログインが必要です。再度ログインしてください。' };
 
   const displayName = String(body.displayName || '').trim().slice(0, 30);
-  const showTryOn = body.showTryOn !== false;
+  const showTryOn = body.showTryOn === true;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -1722,7 +1724,8 @@ function handleAddShareViewer(body) {
     if (count >= MAX_SHARE_VIEWERS) return { success: false, error: '公開相手は最大' + MAX_SHARE_VIEWERS + '人までです。' };
 
     const now = new Date();
-    const row = [Utilities.getUuid(), userId, viewerId, email, label, 'TRUE', now, now];
+    // 既定は「停止中（非公開）」。追加時に active:true を指定したときだけ公開中で登録
+    const row = [Utilities.getUuid(), userId, viewerId, email, label, body.active === true ? 'TRUE' : 'FALSE', now, now];
     sheet.appendRow(row);
     return { success: true, viewer: rowToShareViewer_(row) };
   } finally {
@@ -1830,7 +1833,7 @@ function handleGetSharedWithMe(body) {
   for (let i = 1; i < userData.length; i++) {
     const id = userData[i][0];
     if (!ownerIds[id]) continue;
-    const st = settingsMap[id] || { displayName: '', showTryOn: true };
+    const st = settingsMap[id] || { displayName: '', showTryOn: false };
     owners[id] = {
       ownerId: id,
       displayName: st.displayName || String(userData[i][1] || '').split('@')[0],
@@ -1879,11 +1882,13 @@ function handleGetSharedHistoryDetail(body) {
     if (historyData[i][0] === body.historyId) { row = historyData[i]; break; }
   }
   const notFound = { success: false, error: 'このコーデは表示できません（非公開になったか、公開が停止されました）。' };
-  if (!row || !isTrue_(row[HISTORY_SHARED_COL - 1])) return notFound;
+  if (!row) return notFound;
+  if (!isTrue_(row[HISTORY_SHARED_COL - 1]) && row[1] !== userId) return notFound;
 
   const ownerId = row[1];
+  const isOwner = ownerId === userId; // 自分が送ったリンクを自分で開いた場合
   const shareData = getSharesSheet_().getDataRange().getValues();
-  let allowed = false;
+  let allowed = isOwner;
   for (let i = 1; i < shareData.length; i++) {
     if (shareData[i][1] === ownerId && shareData[i][2] === userId && isTrue_(shareData[i][5])) { allowed = true; break; }
   }
@@ -1892,16 +1897,24 @@ function handleGetSharedHistoryDetail(body) {
   let proposal = null;
   try { proposal = JSON.parse(row[8]); } catch (e) {}
   const st = getOwnShareSettings_(ownerId);
+  let ownerName = st.displayName;
+  if (!ownerName) {
+    const ownerRec = findUserById_(getUsersSheet_(), ownerId);
+    ownerName = ownerRec ? String(ownerRec.row[1] || '').split('@')[0] : '';
+  }
   return {
     success: true,
     detail: {
       historyId: row[0],
+      ownerName: ownerName,
+      isOwner: isOwner,
+      isShared: isTrue_(row[HISTORY_SHARED_COL - 1]),
       createdAt: toIso_(row[2]),
       scene: row[4],
       mood: row[5],
       temperature: row[6],
       proposal: proposal,
-      tryOnImageUrl: st.showTryOn ? (row[9] || '') : ''
+      tryOnImageUrl: (isOwner || st.showTryOn) ? (row[9] || '') : ''
     }
   };
 }
